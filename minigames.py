@@ -13,8 +13,8 @@ import datetime
 import topgg
 from discord.app_commands.errors import CommandOnCooldown, CommandInvokeError
 from discord.errors import HTTPException
+from words import words
 
-# Cache for frequently requested data
 cache = {}
 
 intents = discord.Intents.default()
@@ -246,14 +246,11 @@ async def on_command_error(ctx, error):
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
     if interaction.response.is_done():
-        # If the initial response was already sent, use followup to prevent repeated send_message calls
         send_func = interaction.followup.send
     else:
         send_func = interaction.response.send_message
     
-    # Handle specific errors
     if isinstance(error, CommandOnCooldown):
-        # Only send a cooldown message if needed
         await send_func(f"This command is on cooldown. Please try again after {error.retry_after:.2f} seconds.", ephemeral=True)
     elif isinstance(error, CommandInvokeError):
         await send_func("An error occurred while processing the command.", ephemeral=True)
@@ -283,7 +280,7 @@ async def fetch_data_with_retry(url, retries=3, backoff_factor=2):
                 raise e
     raise Exception("Failed to fetch data after retries")
 
-# Set up SQLite database
+#SQLite
 conn = sqlite3.connect('scores.db')
 c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS scores (
@@ -402,7 +399,6 @@ async def fill(ctx, exclude_members=[]):
     """
     Pad out empty slots in a new game with default characters.
     """
-    # Exclude members already in the list
     available_names = [name for name in predefined_names if name not in exclude_members]
     
     return available_names
@@ -516,7 +512,7 @@ async def simulate(ctx):
 async def dino(ctx):
     score = 0
     obstacles = ["cactus", "bird"]
-    response_time = 8.0  # Start with 8 seconds
+    response_time = 8.0 
 
     while True:
         obstacle = random.choice(obstacles)
@@ -528,9 +524,9 @@ async def dino(ctx):
                 if response.content.lower() == 'jump':
                     score += 1
                     if score >= 30:
-                        response_time = 1.8  # Set response time to 1.8 second if score reaches 30
+                        response_time = 1.8 
                     else:
-                        response_time = max(2.0, response_time - 0.5)  # Decrease response time, but not below 2 seconds
+                        response_time = max(2.0, response_time - 0.5)
                 else:
                     break
             except asyncio.TimeoutError:
@@ -542,9 +538,9 @@ async def dino(ctx):
                 if response.content.lower() == 'duck':
                     score += 1
                     if score >= 30:
-                        response_time = 1.8  # Set response time to 1.8 second if score reaches 30
+                        response_time = 1.8 
                     else:
-                        response_time = max(2.0, response_time - 0.5)  # Decrease response time, but not below 2 seconds
+                        response_time = max(2.0, response_time - 0.5)
                 else:
                     break
             except asyncio.TimeoutError:
@@ -559,23 +555,19 @@ async def dino(interaction: discord.Interaction):
     await interaction.response.send_message("**Please use `;dino` to play the game.**\nDue to rate-limit issues /dino has been removed. Sorry for the inconvenience.", ephemeral=True)
 
 def update_score(user_id, username, score, game):
-    # Check if the user already has a score for this specific game
     c.execute('SELECT score FROM scores WHERE user_id = ? AND game = ?', (user_id, game))
     result = c.fetchone()
 
-    # Define non-cumulative games
     non_cumulative_games = ['dino', 'flagle']
 
     if game in non_cumulative_games:
-        # For non-cumulative games, only update if the new score is higher than the existing one
         if result is None:
             c.execute('INSERT INTO scores (user_id, username, score, game) VALUES (?, ?, ?, ?)', 
                       (user_id, username, score, game))
-        elif score > result[0]:  # Update only if the new score is higher
+        elif score > result[0]: 
             c.execute('UPDATE scores SET score = ? WHERE user_id = ? AND game = ?', 
                       (score, user_id, game))
     else:
-        # For cumulative games, add the new score to the existing score
         if result is None:
             c.execute('INSERT INTO scores (user_id, username, score, game) VALUES (?, ?, ?, ?)', 
                       (user_id, username, score, game))
@@ -588,16 +580,14 @@ def update_score(user_id, username, score, game):
 
 @bot.command(aliases=['lb'])
 async def leaderboard(ctx, game: str):
-    game = game.lower()  # Normalise input for case-insensitivity
+    game = game.lower()  
 
-    # List of supported games
     supported_games = ['dino', 'flagle', 'wordle', 'fight', 'connect4', 'rockpaperscissors', 'tictactoe']
 
     if game not in supported_games:
         await ctx.send("Supported leaderboards: dino, flagle, wordle, fight, connect4, rockpaperscissors, tictactoe.")
         return
 
-    # Fetch the top 10 scores for the specified game
     c.execute('SELECT username, score FROM scores WHERE game = ? ORDER BY score DESC LIMIT 10', (game,))
     top_scores = c.fetchall()
 
@@ -605,7 +595,6 @@ async def leaderboard(ctx, game: str):
         await ctx.send(f"No scores available yet for {game}.")
         return
 
-    # Create leaderboard message
     leaderboard_message = f"**{game.capitalize()} Game Leaderboard**\n"
     for idx, (username, score) in enumerate(top_scores, start=1):
         leaderboard_message += f"{idx}. {username}: {score}\n"
@@ -617,31 +606,24 @@ async def profile(ctx):
     user_id = ctx.author.id
     username = str(ctx.author)
 
-    # List of supported games
     supported_games = ['dino', 'flagle', 'wordle', 'fight', 'connect4', 'rockpaperscissors', 'tictactoe']
 
-    # Prepare profile data
     profile_data = []
 
     for game in supported_games:
-        # Fetch the user's score for the game
         c.execute('SELECT score FROM scores WHERE user_id = ? AND game = ?', (user_id, game))
         result = c.fetchone()
         
         if result:
             user_score = result[0]
             
-            # Calculate the user's rank for this game
             c.execute('SELECT COUNT(*) + 1 FROM scores WHERE game = ? AND score > ?', (game, user_score))
             rank = c.fetchone()[0]
 
-            # Add the game score and rank to the profile data
             profile_data.append((game.capitalize(), user_score, rank))
-        else:
-            # If the user has no score in this game, show as "N/A"
+        else:"
             profile_data.append((game.capitalize(), "N/A", "N/A"))
 
-    # Create the profile embed
     embed = discord.Embed(title=f"{username}'s Game Profile", color=discord.Color.random())
     embed.set_thumbnail(url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
 
@@ -652,51 +634,41 @@ async def profile(ctx):
 
 @bot.command()
 async def score_summary(ctx):
-    # Check if the user is the owner (replace the ID with your actual user ID)
     if ctx.author.id != 678908396845400074:
         await ctx.send("You do not have permission to use this command.")
         return
 
-    # List of supported games
     supported_games = ['dino', 'flagle', 'wordle', 'fight', 'connect4', 'rockpaperscissors', 'tictactoe']
-
-    # Prepare the summary
     summary = "**Total Scores by Game**\n"
     for game in supported_games:
         c.execute('SELECT COUNT(*) FROM scores WHERE game = ?', (game,))
         count = c.fetchone()[0]
         summary += f"{game.capitalize()}: {count} entries\n"
 
-    # Send the summary
     await ctx.send(summary)
 
 class RPSView(View):
     def __init__(self, player, opponent, bot):
-        super().__init__(timeout=30.0)  # Set a 30-second timeout for the view
+        super().__init__(timeout=30.0) 
         self.player = player
         self.opponent = opponent
         self.bot = bot
         self.choices = {}
 
     async def interaction_check(self, interaction: Interaction) -> bool:
-        # Allow only the players to interact with the buttons
         return interaction.user.id in [self.player.id, self.opponent.id]
 
     async def button_callback(self, interaction: Interaction):
-        # Register the player's choice
         self.choices[interaction.user.id] = interaction.data['custom_id']
         await interaction.response.send_message(f"{interaction.user.mention} chose {interaction.data['custom_id']}", ephemeral=True)
 
-        # If both players have made their choices, show the result
         if len(self.choices) == 2:
             await self.show_result(interaction)
 
     async def show_result(self, interaction: Interaction):
-        # Retrieve player choices
         player_choice = self.choices.get(self.player.id)
         opponent_choice = self.choices.get(self.opponent.id)
 
-        # Determine and display the result
         result = self.determine_winner(player_choice, opponent_choice)
         result_message = (
             f"{self.player.mention} chose {player_choice}\n"
@@ -704,7 +676,7 @@ class RPSView(View):
             f"{result}"
         )
         await interaction.followup.send(result_message)
-        self.stop()  # End the game
+        self.stop() 
 
     def determine_winner(self, player_choice, opponent_choice):
         if player_choice == opponent_choice:
@@ -717,24 +689,20 @@ class RPSView(View):
         }
 
         if winning_conditions[player_choice] == opponent_choice:
-            # Player wins
             update_score(self.player.id, str(self.player), 1, 'rockpaperscissors')
             return f"{self.player.mention} wins!"
         else:
-            # Opponent wins
             update_score(self.opponent.id, str(self.opponent), 1, 'rockpaperscissors')
             return f"{self.opponent.mention} wins!"
 
     async def on_timeout(self):
-        # Notify players that the game ended due to inactivity
         channel = await self.bot.fetch_channel(self.player.dm_channel.id if self.player.dm_channel else self.opponent.dm_channel.id)
         await channel.send("Time's up! The Rock-Paper-Scissors game has ended due to inactivity.")
-        self.stop()  # Stop the game
+        self.stop()
 
 @bot.command(aliases=['rps'])
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def rockpaperscissors(ctx, opponent: discord.Member):
-    # Check if the opponent is valid
     if opponent == ctx.author:
         await ctx.send("You cannot play against yourself!")
         return
@@ -742,7 +710,6 @@ async def rockpaperscissors(ctx, opponent: discord.Member):
         await ctx.send("You cannot play against a bot!")
         return
 
-    # Create and send the Rock-Paper-Scissors game view
     view = RPSView(ctx.author, opponent, bot)
     buttons = [
         Button(label="Rock", custom_id="Rock", style=ButtonStyle.primary),
@@ -760,7 +727,6 @@ async def rockpaperscissors(ctx, opponent: discord.Member):
 @app_commands.describe(opponent="The member you want to play against")
 @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
 async def rockpaperscissors(interaction: discord.Interaction, opponent: discord.Member):
-    # Check if the opponent is valid
     if opponent == interaction.user:
         await interaction.response.send_message("You cannot play against yourself!", ephemeral=True)
         return
@@ -768,7 +734,6 @@ async def rockpaperscissors(interaction: discord.Interaction, opponent: discord.
         await interaction.response.send_message("You cannot play against a bot!", ephemeral=True)
         return
 
-    # Create and send the Rock-Paper-Scissors game view
     view = RPSView(interaction.user, opponent, bot)
     buttons = [
         Button(label="Rock", custom_id="Rock", style=ButtonStyle.primary),
@@ -797,18 +762,16 @@ class TicTacToeButton(discord.ui.Button):
             await interaction.response.send_message("This tile is already taken!", ephemeral=True)
             return
 
-        # Update the game board
         view.board[self.row][self.col] = view.current_symbol
         self.label = view.current_symbol
         self.style = discord.ButtonStyle.primary if view.current_symbol == 'X' else discord.ButtonStyle.danger
         self.disabled = True
         await interaction.response.edit_message(view=view)
 
-        # Check for win or draw conditions
         if view.check_winner():
             view.disable_all_buttons()
             await view.message.edit(content=f"{interaction.user.mention} wins! 🎉", view=view)
-            update_score(interaction.user.id, str(interaction.user), 1, 'tictactoe')  # Add 1 point for the winner
+            update_score(interaction.user.id, str(interaction.user), 1, 'tictactoe') 
             view.stop()
             return
 
@@ -818,13 +781,12 @@ class TicTacToeButton(discord.ui.Button):
             view.stop()
             return
 
-        # Switch player turn and update the game board message
         view.switch_player()
         await view.message.edit(content=f"It's {view.current_player.mention}'s turn!", view=view)
 
 class TicTacToeView(discord.ui.View):
     def __init__(self, player1, player2):
-        super().__init__(timeout=30.0)  # Set a 30-second timeout
+        super().__init__(timeout=30.0) 
         self.player1 = player1
         self.player2 = player2
         self.current_player = player1
@@ -832,7 +794,6 @@ class TicTacToeView(discord.ui.View):
         self.board = [[' ' for _ in range(3)] for _ in range(3)]
         self.message = None
 
-        # Create a 3x3 grid of TicTacToe buttons
         for row in range(3):
             for col in range(3):
                 button = TicTacToeButton(label=f"{chr(65+row)}{col+1}", row=row, col=col)
@@ -895,158 +856,6 @@ async def tictactoe(interaction: discord.Interaction, opponent: discord.Member):
     await interaction.response.send_message(f"{interaction.user.mention} vs {opponent.mention}\n{interaction.user.mention}, you're up first!", view=view)
     view.message = await interaction.original_response()
 
-words = [
-    "apple", "grape", "peach", "berry", "melon", "table", "chair", "sugar", "spoon", "brick", "flame", "baker",
-    "drain", "frame", "beach", "dream", "flock", "stone", "storm", "globe", "brave", "brush", "crisp", "grill",
-    "froze", "zebra", "quilt", "knock", "flute", "grove", "catch", "rival", "twist", "wrath", "charm", "plant",
-    "shiny", "slice", "slime", "blink", "crane", "eagle", "flare", "piano", "laugh", "giant", "water", "clear",
-    "grave", "shine", "power", "trail", "river", "solid", "cheek", "sweep", "front", "block", "proud", "bloom",
-    "glove", "chase", "jelly", "swift", "trick", "vivid", "sword", "noise", "shock", "craze", "cloud", "trout",
-    "bring", "frost", "blame", "point", "prize", "flask", "liver", "dance", "mount", "slide", "raise", "sheet",
-    "crush", "paint", "pouch", "lemon", "brace", "fresh", "drink", "queen", "merry", "goose", "bunch", "pitch",
-    "check", "grind", "chill", "penny", "press", "shark", "smile", "crown", "boost", "tiger", "feast", "quiet",
-    "table", "treat", "bread", "pulse", "sheep", "creek", "spell", "merge", "ghost", "jewel", "blade", "bound",
-    "tease", "scale", "flood", "drift", "laugh", "crack", "vault", "prime", "steal", "sheer", "fling", "froth",
-    "shine", "shore", "match", "tight", "bliss", "flock", "spear", "grasp", "spare", "blend", "straw", "chief",
-    "purse", "fancy", "glide", "doubt", "jumpy", "fuzzy", "crisp", "spike", "grant", "crash", "fetch", "drill",
-    "mango", "flour", "raise", "witch", "glass", "front", "grape", "scale", "flame", "slice", "smoke", "brace",
-    "glory", "power", "reach", "blaze", "steep", "treat", "glide", "slope", "gloom", "batch", "craze", "creek",
-    "waste", "lunch", "cream", "sharp", "swing", "vocal", "spoon", "chant", "reach", "smart", "prize", "grind",
-    "charm", "whale", "grape", "bloom", "quilt", "grand", "shock", "lunar", "fluke", "crisp", "twist", "feast",
-    "badge", "pride", "shock", "spice", "clock", "piano", "flash", "crane", "grove", "blame", "swift", "pride",
-    "pouch", "glove", "steep", "frown", "shoot", "creep", "spill", "crack", "boost", "boast", "globe", "climb",
-    "probe", "tough", "flute", "raven", "plant", "tiger", "grill", "slant", "crest", "plane", "stock", "track",
-    "whisk", "shock", "stack", "pilot", "drink", "proud", "chase", "flame", "fleet", "drain", "trout", "snack",
-    "blush", "quail", "grasp", "frost", "space", "reign", "plume", "throw", "crash", "crawl", "blaze", "choke",
-    "drake", "spine", "grind", "trail", "craft", "flock", "tough", "swing", "pouch", "catch", "chill", "piano",
-    "quiet", "blend", "merry", "grace", "spike", "twist", "patch", "flute", "pouch", "fluke", "grand", "reach",
-    "wrist", "flint", "sharp", "brave", "quiet", "gloom", "fuzzy", "prize", "climb", "drill", "spear", "twist",
-    "brisk", "goose", "flock", "prime", "brisk", "tight", "clash", "boost", "brace", "trail", "slime", "pride",
-    "stack", "crest", "shine", "fleet", "prime", "storm", "witch", "shock", "sharp", "stage", "grind", "flame",
-    "flock", "grill", "grove", "drink", "whale", "jelly", "clash", "proud", "spike", "boost", "whisk", "flour",
-    "blame", "blend", "stock", "plane", "flock", "proud", "raven", "stone", "trout", "spike", "shock", "pouch",
-    "waste", "tiger", "plant", "drift", "blush", "grant", "flare", "crown", "brisk", "craft", "craze", "swing",
-    "drain", "flask", "scale", "track", "crack", "piano", "stage", "choke", "snack", "sharp", "track", "wrist",
-    "raven", "creep", "prime", "pouch", "creek", "fleet", "creep", "crest", "grand", "goose", "quilt", "flask",
-    "brisk", "blend", "witch", "stack", "probe", "crest", "steep", "creek", "whale", "stack", "proud", "snack",
-    "flute", "quilt", "sharp", "tiger", "storm", "stage", "grasp", "spike", "fluke", "shoot", "creep", "spice",
-    "brisk", "tough", "stack", "wrist", "storm", "glove", "creep", "flash", "stage", "chill", "stock", "brave",
-    "flask", "flame", "crawl", "drain", "quilt", "blend", "chill", "plant", "craft", "whale", "glove", "stack",
-    "stone", "proud", "plane", "plant", "spike", "craze", "prime", "flame", "grill", "wrist", "flute", "pouch",
-    "flock", "prime", "craft", "shock", "wrist", "gloom", "fluke", "blend", "flame", "drain", "fluke", "stage",
-    "twist", "drain", "track", "flame", "shock", "drake", "spine", "stack", "flask", "prime", "whisk", "craft",
-    "whale", "stone", "wrist", "creep", "stage", "spine", "shock", "prime", "piano", "stock", "proud", "flock",
-    "brave", "craft", "prime", "sharp", "stage", "tiger", "flask", "boost", "prime", "proud", "stage", "drake",
-    "pouch", "proud", "plant", "crest", "drain", "flock", "prime", "flask", "gloom", "whale", "blend", "prime",
-    "boost", "prime", "craft", "wrist", "proud", "brave", "stage", "boost", "flask", "flock", "prime", "stage",
-    "prime", "whisk", "stack", "flask", "prime", "prime", "craft", "prime", "wrist", "stage", "craft", "sharp",
-    "prime", "prime", "whale", "flask", "prime", "prime", "brave", "prime", "craft", "aback", "abase", "abate", 
-    "abbey", "abbot", "abhor", "abide", "abled", "abode", "abort", "about", "above", 
-    "abuse", "abyss", "acorn", "acrid", "actor", "acute", "adage", "adapt", "adept", "admin", "admit", "adobe", 
-    "adopt", "adore", "adorn", "adult", "affix", "afire", "afoot", "afoul", "after", "again", "agape", "agate", 
-    "agent", "agile", "aging", "aglow", "agony", "agree", "ahead", "aider", "aisle", "alarm", "album", "alert", 
-    "algae", "alibi", "alien", "align", "alike", "alive", "allay", "alley", "allot", "allow", "alloy", "aloft", 
-    "alone", "along", "aloof", "aloud", "alpha", "altar", "alter", "amass", "amaze", "amber", "amend", "amiss", 
-    "amity", "among", "ample", "amuse", "angel", "anger", "angle", "angry", "angst", "anime", "ankle", "annex", 
-    "annoy", "annul", "anode", "antic", "anvil", "aorta", "apart", "apple", "apply", "apron", "aptly", "arbor", 
-    "arche", "ardor", "arena", "argue", "arise", "armor", "aroma", "arose", "array", "arrow", "arson", "artsy", 
-    "ascot", "ashen", "aside", "askew", "assay", "asset", "atoll", "atone", "attic", "audio", "audit", "augur", 
-    "aunty", "avail", "avert", "avian", "avoid", "await", "awake", "award", "aware", "awash", "awful", "awoke", 
-    "axial", "axiom", "axion", "azure", "bacon", "badge", "badly", "bagel", "baggy", "baker", "baldy", "balmy", 
-    "banal", "banjo", "barge", "baron", "basal", "basic", "basil", "basin", "basis", "baste", "batch", "bathe", 
-    "baton", "batty", "bawdy", "bayou", "beach", "beady", "beard", "beast", "beech", "beefy", "befit", "began", 
-    "begat", "beget", "begin", "begun", "being", "belch", "belie", "belle", "belly", "below", "bench", "beret", 
-    "berry", "berth", "beset", "betel", "bevel", "bezel", "bible", "bicep", "biddy", "bigot", "bilge", "billy", 
-    "binge", "bingo", "biome", "birch", "birth", "bison", "bitty", "black", "blade", "blame", "bland", "blank", 
-    "blare", "blast", "blaze", "bleak", "bleat", "bleed", "blend", "bless", "blimp", "blind", "blink", "bloat", 
-    "block", "bloke", "blond", "blood", "bloom", "blown", "bluer", "bluff", "blunt", "blurb", "blurt", "blush", 
-    "board", "boast", "bobby", "boney", "bongo", "bonus", "booby", "boost", "booth", "booty", "booze", "boozy", 
-    "borax", "borne", "bosom", "bossy", "botch", "bough", "boule", "bound", "bowel", "boxer", "brace", "braid", 
-    "brain", "brake", "brand", "brash", "brass", "brave", "bravo", "brawl", "brawn", "bread", "break", "breed", 
-    "briar", "bribe", "brick", "bride", "brief", "brine", "bring", "brink", "briny", "brisk", "broad", "broil", 
-    "broke", "brood", "brook", "broom", "broth", "brown", "brunt", "brush", "brute", "buddy", "budge", "buggy", 
-    "bugle", "build", "built", "bulge", "bulky", "bully", "bumpy", "bunch", "bunny", "burly", "burnt", "burst", 
-    "bused", "bushy", "butch", "butte", "buxom", "buyer", "bylaw", "cabin", "cable", "cacao", "cache", "caddy", 
-    "cadet", "cagey", "cairn", "camel", "cameo", "canal", "candy", "canny", "canoe", "canon", "caper", "caput", 
-    "carat", "cargo", "carol", "carry", "carve", "caste", "catch", "cater", "catty", "caulk", "cause", "cavil", 
-    "cease", "cedar", "cello", "chafe", "chaff", "chain", "chair", "chalk", "champ", "chant", "chaos", "chard", 
-    "charm", "chart", "chase", "chasm", "cheap", "cheat", "check", "cheek", "cheer", "chess", "chest", "chick", 
-    "chide", "chief", "child", "chili", "chill", "chime", "china", "chirp", "chock", "choir", "choke", "chomp", 
-    "chord", "chore", "chose", "chuck", "chump", "chunk", "churn", "chute", "cider", "cigar", "cinch", "circa", 
-    "civic", "civil", "clack", "claim", "clamp", "clang", "clank", "clash", "clasp", "class", "clean", "clear", 
-    "cleat", "cleft", "clerk", "click", "cliff", "climb", "cling", "clink", "cloak", "clock", "clone", "close", 
-    "cloth", "cloud", "clout", "clove", "clown", "cluck", "clued", "clump", "clung", "coach", "coast", "cobra", 
-    "cocky", "cocoa", "colon", "color", "comet", "comfy", "comic", "comma", "conch", "condo", "conic", "copse", 
-    "coral", "corer", "corny", "couch", "cough", "could", "count", "coupe", "court", "coven", "cover", "covet", 
-    "covey", "cower", "cowry", "coyly", "crack", "craft", "cramp", "crane", "crank", "crash", "crass", "crate", 
-    "crave", "crawl", "craze", "crazy", "creak", "cream", "credo", "creed", "creek", "creep", "creme", "crepe", 
-    "crept", "cress", "crest", "crick", "cried", "crier", "crime", "crimp", "crisp", "croak", "crock", "crone", 
-    "crony", "crook", "cross", "croup", "crowd", "crown", "crude", "cruel", "crumb", "crump", "crush", "crust", 
-    "crypt", "cubic", "cumin", "curio", "curly", "curry", "curse", "curve", "curvy", "cutie", "cyber", "cycle", 
-    "cynic", "daddy", "daily", "dairy", "daisy", "dally", "dance", "dandy", "datum", "daunt", "dealt", "death", 
-    "debar", "debit", "debug", "debut", "decal", "decay", "decor", "decoy", "decry", "defer", "deify", "deign", 
-    "deity", "delay", "delta", "delve", "demon", "demur", "denim", "dense", "depot", "depth", "derby", "deter", 
-    "detox", "deuce", "devil", "diary", "dicey", "digit", "dilly", "dimly", "dingo", "dingy", "diode", "dirge", 
-    "dirty", "disco", "ditch", "ditto", "ditty", "diver", "dizzy", "dodge", "dodgy", "dogma", "doing", "dolly", 
-    "donor", "donut", "dopey", "doubt", "dough", "dowdy", "dowel", "downy", "dowry", "dozen", "draft", "drain", 
-    "drake", "drama", "drank", "drape", "drawl", "drawn", "dread", "dream", "dress", "dried", "drier", "drift", 
-    "drill", "drink", "drive", "droid", "drone", "drool", "droop", "dross", "drove", "drown", "druid", "drunk", 
-    "dryly", "duchy", "dully", "dummy", "dumpy", "dunce", "dusky", "dusty", "dutch", "duvet", "dwarf", "dwell", 
-    "dwelt", "dying", "eager", "eagle", "early", "earth", "easel", "eaten", "eater", "ebony", "eclat", "edict", 
-    "edify", "eerie", "egret", "eight", "eject", "eking", "elate", "elbow", "elder", "elect", "elegy", "elfin", 
-    "elide", "elite", "elope", "elude", "email", "embed", "ember", "emcee", "empty", "enact", "endow", "enema", 
-    "enemy", "enjoy", "ennui", "ensue", "enter", "entry", "envoy", "epoch", "epoxy", "equal", "equip", "erase", 
-    "erect", "erode", "error", "erupt", "essay", "ester", "ethic", "ethos", "etude", "evade", "evict", "evoke", 
-    "exact", "exalt", "excel", "exert", "exile", "exist", "expel", "extol", "extra", "exult", "eying", "fable", 
-    "facet", "faint", "fairy", "faith", "false", "fancy", "fanny", "farce", "fatal", "fatty", "fault", "fauna", 
-    "favor", "feast", "fecal", "feign", "fella", "felon", "femur", "fence", "feral", "ferry", "fetal", "fetch", 
-    "fetid", "fetus", "fever", "fewer", "fiber", "fibre", "ficus", "field", "fiend", "fiery", "fifth", "fifty", 
-    "fight", "filer", "filet", "filly", "filmy", "filth", "final", "finch", "finis", "first", "fishy", "fixer", 
-    "fizzy", "fjord", "flack", "flail", "flair", "flake", "flaky", "flame", "flank", "flare", "flash", "flask", 
-    "fleck", "fleet", "flesh", "flick", "flier", "fling", "flint", "flirt", "float", "flock", "flood", "floor", 
-    "flora", "floss", "flour", "flout", "flown", "fluff", "fluid", "fluke", "flume", "flung", "flunk", "flush", 
-    "flute", "flyer", "foamy", "focal", "focus", "foggy", "foist", "folio", "folly", "foray", "force", "forge", 
-    "forgo", "forte", "forth", "forty", "forum", "found", "foyer", "frail", "frame", "frank", "fraud", "freak", 
-    "freed", "freer", "fresh", "friar", "fried", "frill", "frisk", "fritz", "frock", "frond", "front", "frost", 
-    "froth", "frown", "froze", "fruit", "fudge", "fuels", "fugal", "fully", "fungi", "funky", "funny", "furor", 
-    "furry", "fussy", "fuzzy", "gaffe", "gaily", "gamer", "gamma", "gamut", "gassy", "gaudy", "gauge", "gaunt", 
-    "gauze", "gavel", "gawky", "gayer", "gayly", "gazer", "gears", "gecko", "geeky", "geese", "genie", "genoa", 
-    "genre", "ghost", "ghoul", "giant", "giddy", "gipsy", "girly", "girth", "given", "giver", "glade", "gland", 
-    "glare", "glass", "glaze", "gleam", "glean", "glide", "glint", "gloat", "globe", "gloom", "glory", "gloss", 
-    "glove", "glyph", "gnash", "gnome", "godly", "going", "golem", "golly", "gonad", "goner", "goofy", "goose", 
-    "gorge", "gouge", "gourd", "grace", "grade", "graft", "grail", "grain", "grand", "grant", "grape", "graph", 
-    "grasp", "grass", "grate", "grave", "gravy", "graze", "great", "greed", "green", "greet", "grief", "grill", 
-    "grime", "grimy", "grind", "gripe", "groan", "groin", "groom", "grope", "gross", "group", "grout", "grove", 
-    "growl", "grown", "gruel", "gruff", "grunt", "guard", "guava", "guess", "guest", "guide", "guild", "guile", 
-    "guilt", "gully", "gumbo", "gummy", "guppy", "gusto", "gusty", "gypsy", "habit", "hairy", "halve", "handy", 
-    "happy", "hardy", "harem", "harpy", "harry", "harsh", "haste", "hasty", "hatch", "hater", "haunt", "haute", 
-    "haven", "havoc", "hazel", "heady", "heard", "heart", "heath", "heave", "heavy", "hedge", "hefty", "heist", 
-    "helix", "hello", "hence", "heron", "hilly", "hinge", "hippo", "hippy", "hitch", "hoard", "hobby", "hoist", 
-    "holly", "homer", "honey", "honor", "horde", "horny", "horse", "hotel", "hotly", "hound", "house", "hovel", 
-    "hover", "howdy", "human", "humid", "humor", "humph", "humus", "hunch", "hunky", "hurry", "husky", "hussy", 
-    "hydro", "hyena", "hymen", "hyper", "icily", "icing", "ideal", "idiom", "idiot", "idler", "idyll", "igloo", 
-    "iliac", "image", "imbue", "impel", "imply", "inane", "inbox", "incur", "index", "inept", "inert", "infer", 
-    "ingot", "inlay", "inlet", "inner", "input", "inter", "intro", "ionic", "irate", "irony", "islet", "issue", 
-    "itchy", "ivory", "jaded", "jaggy", "jaunt", "jazzy", "jelly", "jerky", "jetty", "jiffy", "joint", "joist", 
-    "joker", "jolly", "joust", "judge", "juice", "juicy", "jumbo", "jumpy", "junta", "junto", "juror", "kappa", 
-    "karma", "kayak", "kebab", "khaki", "kinky", "kiosk", "kitty", "knack", "knave", "knead", "kneed", "kneel", 
-    "knelt", "knife", "knock", "knoll", "known", "koala", "krill", "label", "labor", "laden", "ladle", "lager", 
-    "lance", "lanky", "lapel", "lapse", "large", "larva", "lasso", "latch", "later", "lathe", "latte", "laugh", 
-    "layer", "leach", "leafy", "leaky", "leant", "leapt", "learn", "lease", "leash", "least", "leave", "ledge", 
-    "leech", "leery", "lefty", "legal", "leggy", "lemon", "lemur", "leper", "level", "lever", "libel", "liege", 
-    "light", "liken", "lilac", "limbo", "limit", "linen", "liner", "lingo", "lipid", "lithe", "liver", "livid", 
-    "llama", "loamy", "loath", "lobby", "local", "locus", "lodge", "lofty", "logic", "login", "loopy", "loose", 
-    "lorry", "loser", "louse", "lousy", "lover", "lower", "lowly", "loyal", "lucid", "lucky", "lunar", "lunch", 
-    "lunge", "lupus", "lurch", "lurid", "lusty", "lying", "lymph", "lynch", "lyric", "macaw", "macho", "macro", 
-    "madam", "madly", "mafia", "magic", "magma", "maize", "major", "maker", "mambo", "mamma", "mammy", "manly", 
-    "manor", "maple", "march", "marry", "marsh", "mason", "masse", "match", "matey", "matte", "maxim", "maybe", 
-    "mayor", "mealy", "meant", "meaty", "mecca", "medal", "media", "medic", "melee", "melon", "mercy", "merge", 
-    "merit", "merry", "metal", "meter", "metro", "micro", "midge", "midst", "mighty", "mince", "miner", "minge",
-    "motto", "mould", "movie", "mulch", "music", "muted", "nacho", "nasty", "noble", "noisy", "notch", "oasis",
-    "opium", "paint", "quasi", "ranch", "react", "smoke", "spine", "table", "thumb", "urban", "vague", "waste",
-    "woven", "yield", "young", "zonal"
-    ]
-
 @bot.command()
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def wordle(ctx):
@@ -1072,7 +881,7 @@ async def wordle(ctx):
         if guess_content == word:
             guessed = True
             await ctx.send(f"Congratulations! You guessed the word: {word}")
-            update_score(ctx.author.id, str(ctx.author), 1, 'wordle')  # Add 1 point on win
+            update_score(ctx.author.id, str(ctx.author), 1, 'wordle')
             return
 
         feedback = ""
@@ -1107,7 +916,7 @@ async def mathematics(ctx, quiz_type: str):
 
     score = 0
     difficulty = 1
-    response_time = 10.0  # Start with 10 seconds
+    response_time = 10.0 
 
     while True:
         if quiz_type == 'addition':
@@ -1124,9 +933,9 @@ async def mathematics(ctx, quiz_type: str):
             answer = a * b
         elif quiz_type == 'division':
             b = random.randint(1, 5 * difficulty)
-            a = b * random.randint(1, 5 * difficulty)  # Ensure a is divisible by b
+            a = b * random.randint(1, 5 * difficulty) 
             question = f"{a} / {b}"
-            answer = round(a / b, 2)  # Round to 2 decimal places
+            answer = round(a / b, 2) 
 
         end_time = discord.utils.utcnow().timestamp() + response_time
         await ctx.send(f"Solve: {question}\nYou have to answer <t:{int(end_time)}:R>.")
@@ -1138,10 +947,10 @@ async def mathematics(ctx, quiz_type: str):
             guess = await bot.wait_for('message', check=check, timeout=response_time)
             if quiz_type == 'division':
                 try:
-                    if abs(float(guess.content) - answer) < 0.01:  # Allow a small margin of error
+                    if abs(float(guess.content) - answer) < 0.01: 
                         score += 1
                         difficulty += 1
-                        response_time = max(5.0, response_time - 1.0)  # Decrease response time but not below 5 seconds
+                        response_time = max(5.0, response_time - 1.0)
                         await ctx.send("Correct!")
                     else:
                         await ctx.send(f"Wrong! The correct answer was {answer}. Your score is {score}")
@@ -1153,7 +962,7 @@ async def mathematics(ctx, quiz_type: str):
                 if int(guess.content) == answer:
                     score += 1
                     difficulty += 1
-                    response_time = max(5.0, response_time - 1.0)  # Decrease response time but not below 5 seconds
+                    response_time = max(5.0, response_time - 1.0)
                     await ctx.send("Correct!")
                 else:
                     await ctx.send(f"Wrong! The correct answer was {answer}. Your score is {score}")
@@ -1167,7 +976,7 @@ async def mathematics(ctx, quiz_type: str):
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def flagle(ctx):
     score = 0
-    response_time = 10.0  # 10 seconds to answer
+    response_time = 10.0 
 
     embed = discord.Embed(title="Flagle Game", color=discord.Color.blue())
     message = await ctx.send(embed=embed)
@@ -1220,7 +1029,6 @@ async def flagle(ctx):
         flag_url = f"https://flagsapi.com/{country_code}/flat/64.png"
         end_time = discord.utils.utcnow().timestamp() + response_time
 
-        # Update the embed with the flag, timer, and prompt
         embed.clear_fields()
         embed.description = (
             f"Guess the country for this flag:\n[Flag Image]({flag_url})\n"
@@ -1255,7 +1063,7 @@ async def flagle(ctx):
 @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
 async def flagle(interaction: discord.Interaction):
     score = 0
-    response_time = 10.0  # 10 seconds to answer
+    response_time = 10.0 
 
     embed = discord.Embed(title="Flagle Game", color=discord.Color.blue())
     await interaction.response.send_message(embed=embed)
@@ -1309,7 +1117,6 @@ async def flagle(interaction: discord.Interaction):
         flag_url = f"https://flagsapi.com/{country_code}/flat/64.png"
         end_time = discord.utils.utcnow().timestamp() + response_time
 
-        # Update the embed with the flag, timer, and prompt
         embed.clear_fields()
         embed.description = (
             f"Guess the country for this flag:\n[Flag Image]({flag_url})\n"
@@ -1410,13 +1217,13 @@ class BlackjackView(View):
         dealer_score = self.calculate_hand(self.dealer_hand)
         
         if "you win" in result.lower():
-            color = 0x00ff00  # Green for user win
+            color = 0x00ff00 
         elif "dealer wins" in result.lower() or "busted" in result.lower():
-            color = 0xff0000  # Red for dealer win or user busted
+            color = 0xff0000 
         elif "tie" in result.lower():
-            color = 0x808080  # Gray for tie
+            color = 0x808080 
         else:
-            color = 0xff0000  # Default to red for any other case
+            color = 0xff0000 
 
         embed = discord.Embed(title="Blackjack", color=color)
         embed.add_field(name="Your Hand", value=f"{self.player_hand} (Score: {player_score})", inline=False)
@@ -1462,14 +1269,12 @@ async def define(ctx, *, word: str):
         await ctx.send(f"No definition found for '{word}'.")
         return
 
-    # Create an embed message with the definitions
     embed = discord.Embed(title=f"Definition of {word}", color=0x7289da)
     for meaning in data[0]['meanings']:
         part_of_speech = meaning['partOfSpeech']
         definitions = [definition['definition'] for definition in meaning['definitions']]
         definitions_text = '\n'.join(definitions)
         
-        # Truncate if the definitions text is too long
         if len(definitions_text) > 1024:
             definitions_text = definitions_text[:1021] + '...'
         
@@ -1478,7 +1283,7 @@ async def define(ctx, *, word: str):
     
     await ctx.send(embed=embed)
 
-CRIC_API_KEY = 'cc606201-1050-492e-ac30-e638468ddc69'  # Replace with your CricAPI key
+CRIC_API_KEY = ''  #CricAPI key
 
 @bot.command(aliases=['lc', 'live'])
 @commands.cooldown(1, 5, commands.BucketType.user)
@@ -1642,7 +1447,6 @@ async def playcricket(ctx):
             await ctx.send("You took too long to respond. Game over.")
             return
 
-    # Determine the result
     if bot_score > user_score:
         result_message = f"Bot wins!\n**Final scores**\nYou: {user_score}\nBot: {bot_score}"
     else:
@@ -2003,7 +1807,7 @@ class NextButton(Button):
 
 class TruthOrDareView(View):
     def __init__(self):
-        super().__init__(timeout=120)  # 2 minutes timeout
+        super().__init__(timeout=120)
         self.add_item(NextButton())
 
     async def send_random_question(self, interaction: discord.Interaction):
@@ -2068,7 +1872,6 @@ async def race(ctx, opponent: discord.Member):
     def check(m):
         return m.channel == ctx.channel and m.author in [ctx.author, opponent]
 
-    # Track "go" responses
     try:
         response = await bot.wait_for('message', timeout=5.0, check=check)
         if response.content.lower() == "go":
@@ -2133,16 +1936,13 @@ start_time = datetime.datetime.now(datetime.timezone.utc)
 
 @bot.command(aliases=['info', 'bot'])
 async def botinfo(ctx):
-    # Calculate the bot's uptime
     current_time = datetime.datetime.now(datetime.timezone.utc)
     uptime = current_time - start_time
-    uptime_str = str(uptime).split('.')[0]  # Remove microseconds
+    uptime_str = str(uptime).split('.')[0] 
 
-    # Get the number of servers and total number of users
     num_servers = len(bot.guilds)
     num_shards = len(bot.shards)
 
-    # Create the embed
     embed = discord.Embed(title="Bot Information", color=discord.Color.dark_embed())
     embed.set_thumbnail(url=bot.user.avatar)
     embed.add_field(name="Servers and Shards", value=f"{num_servers} Servers, {num_shards} Shards", inline=True)
@@ -2152,21 +1952,17 @@ async def botinfo(ctx):
     embed.add_field(name="Top.gg Page", value="[Vote for the Bot](https://top.gg/bot/1285070559087951974/vote)", inline=False)
     embed.set_footer(text=f"Uptime: {uptime_str}")
 
-    # Send the embed
     await ctx.send(embed=embed)
 
 @bot.tree.command(name="botinfo", description="Get information about the bot")
 async def botinfo(interaction: discord.Interaction):
-    # Calculate the bot's uptime
     current_time = datetime.datetime.now(datetime.timezone.utc)
     uptime = current_time - start_time
-    uptime_str = str(uptime).split('.')[0]  # Remove microseconds
+    uptime_str = str(uptime).split('.')[0] 
 
-    # Get the number of servers and total number of users
     num_servers = len(bot.guilds)
     num_shards = len(bot.shards)
 
-    # Create the embed
     embed = discord.Embed(title="Bot Information", color=discord.Color.dark_embed())
     embed.set_thumbnail(url=bot.user.avatar)
     embed.add_field(name="Servers and Shards", value=f"{num_servers} Servers, {num_shards} Shards", inline=True)
@@ -2176,7 +1972,6 @@ async def botinfo(interaction: discord.Interaction):
     embed.add_field(name="Top.gg Page", value="[Vote for the Bot](https://top.gg/bot/1285070559087951974/vote)", inline=False)
     embed.set_footer(text=f"Uptime: {uptime_str}")
 
-    # Send the embed
     await interaction.response.send_message(embed=embed)
 
 @bot.event
@@ -2409,13 +2204,6 @@ async def riddle(interaction: discord.Interaction):
     except asyncio.TimeoutError:
         await interaction.followup.send(f"Time's up! The correct answer was: {answer}")
 
-@bot.command()
-async def server_info(ctx):
-    if ctx.author.id == 678908396845400074:
-        for guild in bot.guilds:
-            print(guild.name) # prints all server's names
-    else:
-        await ctx.send("You do not have permission to use this command.")
 
 class FirstMoveSelect(Select):
     def __init__(self):
@@ -2438,9 +2226,8 @@ class FirstMoveSelect(Select):
                 description=f"{interaction.user.mention} has forfeited the fight.",
                 color=discord.Color.red()
             )
-            # Send the forfeit message without setting view=None, then stop the view
             await interaction.response.send_message(embed=embed)
-            view.stop()  # Stop the view to prevent further interactions
+            view.stop() 
             return
 
         if self.values[0] == "Attack First":
@@ -2450,12 +2237,12 @@ class FirstMoveSelect(Select):
             view.defender = view.turn
             view.attacker = view.user2 if view.turn == view.user1 else view.user1
 
-        view.turn = view.attacker  # Ensure the attacker goes first
+        view.turn = view.attacker
         await view.start_game(interaction)
 
 class FightView(View):
     def __init__(self, user1, user2):
-        super().__init__(timeout=60.0)  # Set a 60-second timeout
+        super().__init__(timeout=60.0)
         self.user1 = user1
         self.user2 = user2
         self.hp = {user1: 100, user2: 100}
@@ -2466,10 +2253,9 @@ class FightView(View):
         self.defender = None
         self.last_action = ""
         self.attack_move = None
-        self.phase = "attack"  # Start with attack phase
+        self.phase = "attack" 
         self.add_item(FirstMoveSelect())
 
-    # Method to start the game
     async def start_game(self, interaction):
         self.clear_items()
         self.add_item(AttackButton())
@@ -2478,10 +2264,9 @@ class FightView(View):
         self.add_item(DodgeButton())
         self.add_item(ParryButton())
         self.disable_defense_buttons()
-        self.turn = self.attacker  # Ensure the attacker goes first
+        self.turn = self.attacker 
         await self.update_embed(interaction)
 
-    # Embed update method
     async def update_embed(self, interaction):
         embed = discord.Embed(title="Fight!", description=f"It's {self.turn.mention}'s turn!")
         embed.add_field(name=f"{self.user1.name}'s HP", value=self.hp[self.user1], inline=True)
@@ -2517,24 +2302,20 @@ class FightView(View):
         embed.set_image(url=gif_url)
         await interaction.response.edit_message(embed=embed, view=self)
 
-    # Method to end the game
     async def end_game(self, interaction, winner):
         embed = discord.Embed(title="Game Over", description=f"{winner.mention} wins!")
         embed.add_field(name=f"{self.user1.name}'s HP", value=self.hp[self.user1], inline=True)
         embed.add_field(name=f"{self.user2.name}'s HP", value=self.hp[self.user2], inline=True)
         await interaction.response.edit_message(embed=embed, view=None)
-        update_score(winner.id, str(winner), 1, 'fight')  # Add 1 point for the winner
-        self.stop()  # Stop the view to end the game
+        update_score(winner.id, str(winner), 1, 'fight') 
+        self.stop() 
 
-    # Method to handle timeout
     async def on_timeout(self):
-        # Notify players that the game has ended due to inactivity
         await self.user1.send("The fight has ended due to inactivity.")
         await self.user2.send("The fight has ended due to inactivity.")
-        self.stop()  # End the game
+        self.stop() 
 
     async def next_turn(self, interaction, skip_defense=False):
-        # Check for end of game
         if self.hp[self.user1] <= 0:
             await self.end_game(interaction, self.user2)
             return
@@ -2544,7 +2325,6 @@ class FightView(View):
 
         if self.phase == "attack":
             if skip_defense:
-                # Apply damage directly if needed
                 damage = self.attack_move.get("damage", 0)
                 if self.attack_move.get("self_damage"):
                     self.hp[self.attacker] -= damage
@@ -2553,21 +2333,18 @@ class FightView(View):
                     self.hp[self.defender] -= damage
                     self.last_action = f"{self.attacker.mention} dealt {damage} damage to {self.defender.mention}."
 
-                # Swap roles and proceed to the next round
-                self.phase = "attack"  # Continue in attack phase
+                self.phase = "attack" 
                 self.attacker, self.defender = self.defender, self.attacker
                 self.turn = self.attacker
                 self.round += 1
                 self.enable_attack_buttons()
                 self.disable_defense_buttons()
             else:
-                # Proceed to defense phase
                 self.phase = "defense"
                 self.turn = self.defender
                 self.enable_defense_buttons()
                 self.disable_attack_buttons()
         else:
-            # After defense, swap roles and continue the attack phase
             self.phase = "attack"
             self.attacker, self.defender = self.defender, self.attacker
             self.turn = self.attacker
@@ -2575,7 +2352,6 @@ class FightView(View):
             self.enable_attack_buttons()
             self.disable_defense_buttons()
 
-        # Update the embed with the new round, action, and possibly the GIF
         await self.update_embed(interaction)
 
     def enable_attack_buttons(self):
@@ -2641,7 +2417,7 @@ class CrashOutButton(Button):
             damage = 60
             view.attack_move = {"damage": damage, "self_damage": True}
             view.last_action = f"{interaction.user.mention} did a Crash Out and dealt {damage} damage to themselves."
-        await view.next_turn(interaction, skip_defense=True)  # Skip defense
+        await view.next_turn(interaction, skip_defense=True)
 
 class AttackButton(Button):
     def __init__(self):
@@ -2670,7 +2446,7 @@ class HeavyAttackButton(Button):
         if random.random() < 0.2:
             view.attack_move = {"damage": 0}
             view.last_action = f"{interaction.user.mention} tried a Heavy Attack but missed!"
-            await view.next_turn(interaction, skip_defense=True)  # Skip defense
+            await view.next_turn(interaction, skip_defense=True) 
         else:
             damage = random.randint(25, 30)
             view.attack_move = {"damage": damage, "counter_damage": random.randint(25, 30)}
@@ -2746,11 +2522,9 @@ PLAYER2_PIECE = "🟡"
 ROWS = 6
 COLUMNS = 7
 
-# Initialize the board
 def initialize_board():
     return [[EMPTY_SLOT for _ in range(COLUMNS)] for _ in range(ROWS)]
 
-# Generate the embed for commands.Context
 def generate_embed(board, current_player, ctx):
     description = "\n".join(["".join(row) for row in board])
     color = discord.Color.red() if current_player == ctx.author else discord.Color.yellow()
@@ -2758,7 +2532,6 @@ def generate_embed(board, current_player, ctx):
     embed.add_field(name="Current Turn", value=f"{current_player.mention} ({PLAYER1_PIECE if current_player == ctx.author else PLAYER2_PIECE})")
     return embed
 
-# Generate the embed for discord.Interaction
 def generate_embed_for_interaction(board, current_player, interaction):
     description = "\n".join(["".join(row) for row in board])
     color = discord.Color.red() if current_player == interaction.user else discord.Color.yellow()
@@ -2766,7 +2539,6 @@ def generate_embed_for_interaction(board, current_player, interaction):
     embed.add_field(name="Current Turn", value=f"{current_player.mention} ({PLAYER1_PIECE if current_player == interaction.user else PLAYER2_PIECE})")
     return embed
 
-# Create buttons
 def create_buttons():
     view = View()
     for col in range(COLUMNS):
@@ -2774,9 +2546,7 @@ def create_buttons():
         view.add_item(button)
     return view
 
-# Check for win conditions
 def check_win(board, piece):
-    # Check horizontal, vertical, and diagonal win conditions
     for row in range(ROWS):
         for col in range(COLUMNS - 3):
             if all(board[row][col + i] == piece for i in range(4)):
@@ -2826,7 +2596,6 @@ async def start_connect4_game(source, current_player, opponent_player):
     embed = generate_embed(board, current_player, source)
     view = create_buttons()
     
-    # Set a 60-second timeout for the view
     view.timeout = 60.0
 
     if isinstance(source, commands.Context):
@@ -2842,54 +2611,45 @@ async def start_connect4_game(source, current_player, opponent_player):
         
         col = int(interaction.data["custom_id"])
         
-        # Check if the column is full before placing a piece
         if board[0][col] != EMPTY_SLOT:
             await interaction.response.send_message("This column is full! Choose another column.", ephemeral=True)
             return
 
-        # Place the piece in the lowest empty slot in the column
         for row in reversed(range(ROWS)):
             if board[row][col] == EMPTY_SLOT:
                 board[row][col] = PLAYER1_PIECE if current_player == (source.author if isinstance(source, commands.Context) else source.user) else PLAYER2_PIECE
                 break
 
-        # Check if the move resulted in a win
         if check_win(board, PLAYER1_PIECE if current_player == (source.author if isinstance(source, commands.Context) else source.user) else PLAYER2_PIECE):
             embed = generate_embed(board, current_player, source)
             embed.set_footer(text=f"{current_player} wins! 🎉")
             await interaction.response.edit_message(embed=embed, view=None)
-            # Add 1 point for the winner
             update_score(current_player.id, str(current_player), 1, 'connect4')
-            view.stop()  # Stop the view to end the game
+            view.stop() 
             return
 
-        # Check if the board is now full (tie)
         if check_tie(board):
             embed = generate_embed(board, current_player, source)
             embed.set_footer(text="It's a tie! 😐")
             await interaction.response.edit_message(embed=embed, view=None)
-            view.stop()  # Stop the view to end the game
+            view.stop() 
             return
 
-        # Update the button to disable it if the column is now full
         if board[0][col] != EMPTY_SLOT:
             for item in view.children:
                 if item.custom_id == str(col):
                     item.disabled = True
 
-        # Switch turns
         current_player = opponent_player if current_player == (source.author if isinstance(source, commands.Context) else source.user) else (source.author if isinstance(source, commands.Context) else source.user)
         embed = generate_embed(board, current_player, source)
         await interaction.response.edit_message(embed=embed, view=view)
 
-    # Set the callback for each button
     for item in view.children:
         item.callback = button_callback
 
     async def on_timeout():
-        # Notify players that the game has ended due to inactivity
         await message.channel.send("Time's up! The Connect 4 game has ended due to inactivity.")
-        view.stop()  # Stop the view to end the game
+        view.stop() 
 
     view.on_timeout = on_timeout
 
@@ -2901,7 +2661,8 @@ def generate_embed(board, current_player, source):
     return embed
 
 
-TOP_GG_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjEyODUwNzA1NTkwODc5NTE5NzQiLCJib3QiOnRydWUsImlhdCI6MTcyOTg1MTU5Nn0.yunYOfgRwyVFNUttCWt9-P1X2ObF7hTccLv5VW_QW0c'
+#Setting up bot's top.gg page
+TOP_GG_TOKEN = '' # top.gg token
 
 class TopGG(commands.Cog):
     def __init__(self, bot):
@@ -2931,4 +2692,4 @@ class TopGG(commands.Cog):
     async def on_guild_remove(self, guild):
         await self.update_stats()
 
-bot.run('MTI4NTA3MDU1OTA4Nzk1MTk3NA.GUGGCw.xMr8_BGGJyP1FycyFuklB66wx8k0Mufsk-DMPk')
+bot.run('') #discord token
