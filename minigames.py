@@ -412,15 +412,52 @@ async def fill(ctx, exclude_members=[]):
     
     return available_names
 
+async def _await_player_message(ctx, prompt_text, *, valid=None, timeout=60.0):
+    """Prompt the author and wait for their reply in the SAME channel.
+
+    Returns the message, or None if they did not answer in time. This replaces
+    the old open-ended bot.wait_for calls that had no timeout (leaking
+    coroutines on abandoned games) and no channel check (capturing the user's
+    messages from any channel)."""
+    await ctx.send(prompt_text)
+
+    def check(m):
+        if m.author != ctx.author or m.channel != ctx.channel:
+            return False
+        return valid(m.content) if valid else True
+
+    try:
+        return await bot.wait_for('message', check=check, timeout=timeout)
+    except asyncio.TimeoutError:
+        await ctx.send("You took too long to respond. The simulation has been cancelled.")
+        return None
+
+async def _send_highlights(ctx, header, highlights):
+    """Send a header then the highlights batched into as few messages as
+    possible (Discord's 2000-char limit), instead of one message per
+    highlight - the previous behaviour could fire 30-50+ messages per match
+    and routinely hit the per-channel rate limit."""
+    await ctx.send(header)
+    chunk = ""
+    for line in highlights:
+        if len(chunk) + len(line) + 1 > 1900:
+            await ctx.send(chunk)
+            chunk = ""
+        chunk += line + "\n"
+    if chunk:
+        await ctx.send(chunk)
+
 @bot.command(aliases=['sim'])
 @commands.cooldown(1, 60, commands.BucketType.user)
 async def simulate(ctx):
-    await ctx.send("Enter the name of Team 1:")
-    team1_name = await bot.wait_for('message', check=lambda m: m.author == ctx.author)
-    
-    await ctx.send(f"Enter the names of the players for {team1_name.content} (comma-separated) or type 'fill' to auto-fill:")
-    team1_players = await bot.wait_for('message', check=lambda m: m.author == ctx.author)
-    
+    team1_name = await _await_player_message(ctx, "Enter the name of Team 1:")
+    if team1_name is None:
+        return
+
+    team1_players = await _await_player_message(ctx, f"Enter the names of the players for {team1_name.content} (comma-separated) or type 'fill' to auto-fill:")
+    if team1_players is None:
+        return
+
     if team1_players.content.lower() == 'fill':
         available_members = await fill(ctx)
         if len(available_members) < 11:
@@ -430,12 +467,14 @@ async def simulate(ctx):
     else:
         team1 = team1_players.content.split(',')
 
-    await ctx.send("Enter the name of Team 2:")
-    team2_name = await bot.wait_for('message', check=lambda m: m.author == ctx.author)
-    
-    await ctx.send(f"Enter the names of the players for {team2_name.content} (comma-separated) or type 'fill' to auto-fill:")
-    team2_players = await bot.wait_for('message', check=lambda m: m.author == ctx.author)
-    
+    team2_name = await _await_player_message(ctx, "Enter the name of Team 2:")
+    if team2_name is None:
+        return
+
+    team2_players = await _await_player_message(ctx, f"Enter the names of the players for {team2_name.content} (comma-separated) or type 'fill' to auto-fill:")
+    if team2_players is None:
+        return
+
     if team2_players.content.lower() == 'fill':
         available_members = await fill(ctx, exclude_members=team1)
         if len(available_members) < 11:
@@ -445,8 +484,9 @@ async def simulate(ctx):
     else:
         team2 = team2_players.content.split(',')
 
-    await ctx.send("Select the number of overs per innings (5, 10, 20):")
-    overs_message = await bot.wait_for('message', check=lambda m: m.author == ctx.author and m.content in ['5', '10', '20'])
+    overs_message = await _await_player_message(ctx, "Select the number of overs per innings (5, 10, 20):", valid=lambda c: c in ['5', '10', '20'])
+    if overs_message is None:
+        return
     overs = int(overs_message.content)
     max_overs_per_bowler = {5: 1, 10: 2, 20: 4}[overs]
 
@@ -462,10 +502,7 @@ async def simulate(ctx):
 
     runs1, wickets1, scores1, wickets_taken1, highlights1, _, overs1, balls_faced1 = simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler)
 
-    await ctx.send("\nFirst Innings Highlights:")
-    for highlight in highlights1:
-        await ctx.send(highlight)
-        await asyncio.sleep(2)
+    await _send_highlights(ctx, "\nFirst Innings Highlights:", highlights1)
 
     top_batsmen1, top_bowlers1 = get_top_performers(scores1, wickets_taken1, balls_faced1)
 
@@ -483,10 +520,7 @@ async def simulate(ctx):
 
     runs2, wickets2, scores2, wickets_taken2, highlights2, chased, overs2, balls_faced2 = simulate_innings(bowling_team, batting_team, overs, max_overs_per_bowler, target=runs1)
 
-    await ctx.send("\nSecond Innings Highlights:")
-    for highlight in highlights2:
-        await ctx.send(highlight)
-        await asyncio.sleep(2)
+    await _send_highlights(ctx, "\nSecond Innings Highlights:", highlights2)
 
     if runs2 > runs1:
         result = f"\n{bowling_team_name} wins by {10 - wickets2} wickets!"
