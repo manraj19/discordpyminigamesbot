@@ -37,10 +37,17 @@ bot = commands.AutoShardedBot(command_prefix=';', intents=intents)
 bot.remove_command('help')
 
 @bot.event
+async def setup_hook():
+    # Runs once during startup (before on_ready). on_ready can fire repeatedly
+    # on every gateway reconnect/RESUME, so adding the cog there re-added it on
+    # every reconnect - raising "already loaded" and/or stacking duplicate
+    # tasks.loop instances that double-posted to Top.gg.
+    await bot.add_cog(TopGG(bot))
+
+@bot.event
 async def on_ready():
     await bot.change_presence(activity=discord.Game(name=";help"))
     print(f'Logged in as {bot.user}')
-    await bot.add_cog(TopGG(bot))
 
 @bot.command()
 async def sync(ctx):
