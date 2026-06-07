@@ -10,7 +10,7 @@
 3. Convert all blocking `requests.get` → shared `aiohttp` session.
 4. Fix `simulate` message spam → one progressively-edited message / batched embed; add `timeout=` + channel checks to its `wait_for`s.
 5. Move `add_cog` to `setup_hook`; remove beta's `on_ready` global sync.
-6. Collapse the `minigames`/`minibeta` split into one codebase (beta = a branch).
+6. ~~Collapse the `minigames`/`minibeta` split into one codebase (beta = a branch).~~ **Done** — `minibeta.py` removed from the repo; the repo now tracks the production bot only. Beta-only games (Wordle/Trivia/WhatBeatsRock) can be ported into `minigames.py` later from git history (commit `1a91e0d`).
 7. Fix `fetch_data_with_retry` unbound-`response` bug; guard `FightView.on_timeout` DMs.
 
 ### Medium (maintainability)
