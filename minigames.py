@@ -39,10 +39,14 @@ bot.remove_command('help')
 @bot.event
 async def setup_hook():
     # Runs once during startup (before on_ready). on_ready can fire repeatedly
-    # on every gateway reconnect/RESUME, so adding the cog there re-added it on
+    # on every gateway reconnect/RESUME, so adding cogs there re-added them on
     # every reconnect - raising "already loaded" and/or stacking duplicate
     # tasks.loop instances that double-posted to Top.gg.
+    from bot.services.scores import ScoreService
+    bot.scores = ScoreService()
     await bot.add_cog(TopGG(bot))
+    # Migrated games live in the bot/ package and are loaded as extensions.
+    await bot.load_extension("bot.cogs.tictactoe")
 
 @bot.event
 async def on_ready():
@@ -796,115 +800,9 @@ async def rockpaperscissors(interaction: discord.Interaction, opponent: discord.
 
     await interaction.response.send_message(f"{interaction.user.mention} vs {opponent.mention}\nChoose your move!", view=view)
 
-class TicTacToeButton(discord.ui.Button):
-    def __init__(self, label, row, col):
-        super().__init__(label=label, style=discord.ButtonStyle.secondary)
-        self.row = row
-        self.col = col
-
-    async def callback(self, interaction: discord.Interaction):
-        view: TicTacToeView = self.view
-        if interaction.user != view.current_player:
-            await interaction.response.send_message("It's not your turn!", ephemeral=True)
-            return
-
-        if view.board[self.row][self.col] != ' ':
-            await interaction.response.send_message("This tile is already taken!", ephemeral=True)
-            return
-
-        view.board[self.row][self.col] = view.current_symbol
-        self.label = view.current_symbol
-        self.style = discord.ButtonStyle.primary if view.current_symbol == 'X' else discord.ButtonStyle.danger
-        self.disabled = True
-        await interaction.response.edit_message(view=view)
-
-        if view.check_winner():
-            view.disable_all_buttons()
-            await view.message.edit(content=f"{interaction.user.mention} wins! 🎉", view=view)
-            update_score(interaction.user.id, str(interaction.user), 1, 'tictactoe') 
-            view.stop()
-            return
-
-        if view.is_draw():
-            view.disable_all_buttons()
-            await view.message.edit(content="It's a draw! 😐", view=view)
-            view.stop()
-            return
-
-        view.switch_player()
-        await view.message.edit(content=f"It's {view.current_player.mention}'s turn!", view=view)
-
-class TicTacToeView(discord.ui.View):
-    def __init__(self, player1, player2):
-        super().__init__(timeout=30.0) 
-        self.player1 = player1
-        self.player2 = player2
-        self.current_player = player1
-        self.current_symbol = 'X'
-        self.board = [[' ' for _ in range(3)] for _ in range(3)]
-        self.message = None
-
-        for row in range(3):
-            for col in range(3):
-                button = TicTacToeButton(label=f"{chr(65+row)}{col+1}", row=row, col=col)
-                self.add_item(button)
-
-    def switch_player(self):
-        self.current_player = self.player2 if self.current_player == self.player1 else self.player1
-        self.current_symbol = 'O' if self.current_symbol == 'X' else 'X'
-
-    def check_winner(self):
-        for row in self.board:
-            if row[0] == row[1] == row[2] != ' ':
-                return True
-        for col in range(3):
-            if self.board[0][col] == self.board[1][col] == self.board[2][col] != ' ':
-                return True
-        if self.board[0][0] == self.board[1][1] == self.board[2][2] != ' ':
-            return True
-        if self.board[0][2] == self.board[1][1] == self.board[2][0] != ' ':
-            return True
-        return False
-
-    def is_draw(self):
-        return all(cell != ' ' for row in self.board for cell in row)
-
-    def disable_all_buttons(self):
-        for item in self.children:
-            item.disabled = True
-
-    async def on_timeout(self):
-        if self.message:
-            await self.message.channel.send("Time's up! The game has ended due to inactivity.")
-        self.stop()
-
-@bot.command(aliases=['ttt'])
-@commands.cooldown(1, 20, commands.BucketType.user)
-async def tictactoe(ctx, opponent: discord.Member):
-    if opponent == ctx.author:
-        await ctx.send("You cannot play against yourself!")
-        return
-    if opponent.bot:
-        await ctx.send("You cannot play against a bot!")
-        return
-
-    view = TicTacToeView(ctx.author, opponent)
-    view.message = await ctx.send(f"{ctx.author.mention} vs {opponent.mention}\n{ctx.author.mention}, you're up first!", view=view)
-
-@bot.tree.command(name="tictactoe", description="Play a game of Tic-Tac-Toe")
-@app_commands.describe(opponent="The member you want to play against")
-@app_commands.checks.cooldown(1, 20, key=lambda i: (i.user.id))
-async def tictactoe(interaction: discord.Interaction, opponent: discord.Member):
-    if opponent == interaction.user:
-        await interaction.response.send_message("You cannot play against yourself!", ephemeral=True)
-        return
-    if opponent.bot:
-        await interaction.response.send_message("You cannot play against a bot!", ephemeral=True)
-        return
-
-    view = TicTacToeView(interaction.user, opponent)
-    await interaction.response.send_message(f"{interaction.user.mention} vs {opponent.mention}\n{interaction.user.mention}, you're up first!", view=view)
-    view.message = await interaction.original_response()
+# Tic-Tac-Toe has been migrated to the bot/ package
+# (bot/games, bot/views, bot/cogs/tictactoe.py) and is loaded as an extension
+# in setup_hook. This is the template for migrating the remaining games.
 
 @bot.command(aliases=['math', 'maths'])
 @commands.cooldown(1, 10, commands.BucketType.user)
