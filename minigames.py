@@ -2307,9 +2307,15 @@ class FightView(View):
         self.stop() 
 
     async def on_timeout(self):
-        await self.user1.send("The fight has ended due to inactivity.")
-        await self.user2.send("The fight has ended due to inactivity.")
-        self.stop() 
+        # Guard each DM: user.send raises Forbidden if that user has DMs closed,
+        # which previously aborted the handler (and left the other player
+        # un-notified and the view not stopped).
+        for user in (self.user1, self.user2):
+            try:
+                await user.send("The fight has ended due to inactivity.")
+            except discord.HTTPException:
+                pass
+        self.stop()
 
     async def next_turn(self, interaction, skip_defense=False):
         if self.hp[self.user1] <= 0:
@@ -2679,12 +2685,9 @@ class TopGG(commands.Cog):
     async def before_update_stats(self):
         await self.bot.wait_until_ready()
 
-    @commands.Cog.listener()
-    async def on_guild_join(self, guild):
-        await self.update_stats()
-
-    @commands.Cog.listener()
-    async def on_guild_remove(self, guild):
-        await self.update_stats()
+    def cog_unload(self):
+        # Cancel the background loop if the cog is ever reloaded/unloaded so it
+        # doesn't keep running detached.
+        self.update_stats.cancel()
 
 bot.run(os.environ["DISCORD_TOKEN"])
