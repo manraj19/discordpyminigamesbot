@@ -6,11 +6,11 @@ from discord import app_commands
 from tabulate import tabulate
 from discord import ButtonStyle, Interaction
 from discord.ui import Button, View, Select
-import asyncio
 import sqlite3
-import requests
+import aiohttp
 import datetime
 import topgg
+from urllib.parse import quote
 from discord.app_commands.errors import CommandOnCooldown, CommandInvokeError
 from discord.errors import HTTPException
 import os
@@ -30,8 +30,6 @@ def _load_dotenv(path=".env"):
 
 
 _load_dotenv()
-
-cache = {}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -268,26 +266,28 @@ async def on_app_command_error(interaction: discord.Interaction, error):
     else:
         await send_func("An unknown error occurred.", ephemeral=True)
 
-async def get_cached_data(key, fetch_function, *args, **kwargs):
-    if key in cache:
-        return cache[key]
-    data = await fetch_function(*args, **kwargs)
-    cache[key] = data
-    return data
+_http_session = None
 
-async def fetch_data_with_retry(url, retries=3, backoff_factor=2):
-    for i in range(retries):
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            if response.status_code == 429:
-                retry_after = int(response.headers.get("Retry-After", 1))
-                await asyncio.sleep(retry_after * backoff_factor ** i)
-            else:
-                raise e
-    raise Exception("Failed to fetch data after retries")
+
+async def get_http_session():
+    """Lazily create and reuse one aiohttp session for the bot's lifetime."""
+    global _http_session
+    if _http_session is None or _http_session.closed:
+        _http_session = aiohttp.ClientSession()
+    return _http_session
+
+
+async def fetch_json(url):
+    """Non-blocking GET. Returns (status, parsed_json_or_None) without ever
+    blocking the event loop (unlike the previous requests.get calls)."""
+    session = await get_http_session()
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+            if response.status != 200:
+                return response.status, None
+            return response.status, await response.json(content_type=None)
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+        return None, None
 
 #SQLite
 conn = sqlite3.connect('scores.db')
@@ -1215,15 +1215,14 @@ async def blackjack(interaction: discord.Interaction):
 @bot.command(aliases=['def'])
 @commands.cooldown(1, 5, commands.BucketType.user)
 async def define(ctx, *, word: str):
-    url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
-    response = requests.get(url)
-    
-    if response.status_code != 200:
+    url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(word)}"
+    status, data = await fetch_json(url)
+
+    if status != 200 or not data:
         await ctx.send(f"No definition found for '{word}'.")
         return
 
-    data = response.json()
-    if not data or 'title' in data:
+    if 'title' in data:
         await ctx.send(f"No definition found for '{word}'.")
         return
 
@@ -1247,13 +1246,12 @@ CRIC_API_KEY = os.environ.get("CRICAPI_KEY", "")  # CricAPI key
 @commands.cooldown(1, 5, commands.BucketType.user)
 async def livecricket(ctx):
     url = f"https://api.cricapi.com/v1/currentMatches?apikey={CRIC_API_KEY}&offset=0"
-    response = requests.get(url)
-    
-    if response.status_code != 200:
+    status, data = await fetch_json(url)
+
+    if status != 200 or not data:
         await ctx.send("Could not fetch live cricket scores. Please try again later.")
         return
 
-    data = response.json()
     matches = data.get('data', [])
     
     if not matches:
@@ -1275,15 +1273,14 @@ async def livecricket(ctx):
 @bot.command(aliases=['urban'])
 @commands.cooldown(1, 5, commands.BucketType.user)
 async def urbandictionary(ctx, *, term: str):
-    url = f"https://api.urbandictionary.com/v0/define?term={term}"
-    response = requests.get(url)
-    
-    if response.status_code != 200:
+    url = f"https://api.urbandictionary.com/v0/define?term={quote(term)}"
+    status, data = await fetch_json(url)
+
+    if status != 200 or not data:
         await ctx.send(f"No definition found for '{term}'.")
         return
 
-    data = response.json()
-    if not data or not data['list']:
+    if not data.get('list'):
         await ctx.send(f"No definition found for '{term}'.")
         return
 
