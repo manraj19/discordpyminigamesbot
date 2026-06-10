@@ -99,5 +99,11 @@ class ScoreService:
         cur.execute("SELECT COUNT(*) FROM scores WHERE game = ?", (game,))
         return cur.fetchone()[0]
 
+    def total_entries(self):
+        return self._conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
+
+    def unique_users(self):
+        return self._conn.execute("SELECT COUNT(DISTINCT user_id) FROM scores").fetchone()[0]
+
     def close(self):
         self._conn.close()

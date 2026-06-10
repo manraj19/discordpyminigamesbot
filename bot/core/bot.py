@@ -9,7 +9,9 @@ from discord.ext import commands
 
 from bot.clients.http import HttpClient
 from bot.core import config
+from bot.core.checks import BlocklistCommandTree, global_blocklist_check
 from bot.core.errors import setup_error_handlers
+from bot.services.blocklist import BlocklistService
 from bot.services.scores import ScoreService
 
 log = logging.getLogger(__name__)
@@ -43,14 +45,17 @@ class MiniGamesBot(commands.AutoShardedBot):
             command_prefix=config.COMMAND_PREFIX,
             intents=intents,
             help_command=None,
+            tree_cls=BlocklistCommandTree,
         )
         # Shared services (not bot.http - that name is taken by discord.py).
         self.scores = ScoreService()
+        self.blocklist = BlocklistService()
         self.http_client = HttpClient()
         self.start_time = discord.utils.utcnow()
 
     async def setup_hook(self):
         setup_error_handlers(self)
+        self.add_check(global_blocklist_check)  # blocks banned users from prefix commands
         for extension in EXTENSIONS:
             try:
                 await self.load_extension(extension)
@@ -64,4 +69,5 @@ class MiniGamesBot(commands.AutoShardedBot):
     async def close(self):
         await self.http_client.close()
         self.scores.close()
+        self.blocklist.close()
         await super().close()
