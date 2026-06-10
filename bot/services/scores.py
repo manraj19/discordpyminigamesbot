@@ -16,6 +16,9 @@ import sqlite3
 # Games where only a personal best is kept; everything else accumulates.
 NON_CUMULATIVE_GAMES = {"dino", "flagle"}
 
+# Games that appear on leaderboards and profiles.
+SUPPORTED_GAMES = ["dino", "flagle", "fight", "connect4", "rockpaperscissors", "tictactoe"]
+
 
 class ScoreService:
     def __init__(self, db_path="scores.db"):
@@ -70,6 +73,31 @@ class ScoreService:
             (game, limit),
         )
         return cur.fetchall()
+
+    def user_score(self, user_id, game):
+        """Return the user's score for a game, or None."""
+        cur = self._conn.cursor()
+        cur.execute(
+            "SELECT score FROM scores WHERE user_id = ? AND game = ?",
+            (user_id, game),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+    def rank(self, game, score):
+        """Return the 1-based rank a given score would hold in a game."""
+        cur = self._conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*) + 1 FROM scores WHERE game = ? AND score > ?",
+            (game, score),
+        )
+        return cur.fetchone()[0]
+
+    def count(self, game):
+        """Return how many entries exist for a game."""
+        cur = self._conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM scores WHERE game = ?", (game,))
+        return cur.fetchone()[0]
 
     def close(self):
         self._conn.close()

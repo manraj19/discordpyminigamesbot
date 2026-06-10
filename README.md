@@ -30,22 +30,50 @@ Scores for competitive games are tracked per user in SQLite and surfaced through
 - **SQLite** for score persistence
 - **topggpy** for Top.gg server-count posting
 
+## Architecture
+
+The bot is a small package with a strict separation of concerns, which keeps
+game rules testable and lets one core back both the prefix and slash version of
+each command:
+
+```
+bot/
+├─ __main__.py     # entry point (python -m bot)
+├─ core/           # config, bot subclass, logging, error handling, embeds, utils
+├─ clients/        # shared aiohttp HTTP client
+├─ services/       # scores.py — ScoreService over scores.db
+├─ data/           # static game data as JSON (countries, riddles, truth/dare, …)
+├─ games/          # PURE rules, no discord imports (unit-tested)
+├─ views/          # discord UI (View/Button/Select) classes
+└─ cogs/           # thin command adapters wiring prefix + slash to the above
+```
+
+Design notes:
+
+- **`bot/games/` imports no discord.py**, so the rules are unit-testable in isolation.
+- Each cog exposes a single `_start()`/core used by **both** the prefix and slash
+  command, so the two never drift out of sync.
+- All one-time setup runs in `setup_hook` (not `on_ready`, which re-fires on every
+  reconnect); the command tree is synced manually via the owner-only `;sync`.
+- External HTTP uses one shared, non-blocking `aiohttp` session; secrets come from
+  the environment.
+
 ## Getting started
 
 ```bash
-# 1. Clone and create a virtualenv
+# 1. Create a virtualenv
 python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # Linux/macOS
 
 # 2. Install dependencies
 pip install -r requirements.txt
 
 # 3. Configure secrets
-copy .env.example .env        # then edit .env with your real tokens
+copy .env.example .env          # then edit .env with your real tokens
 
 # 4. Run
-python minigames.py
+python -m bot
 ```
 
 ## Configuration
@@ -63,49 +91,38 @@ Never commit `.env` — it's git-ignored.
 
 ## Commands
 
-Default prefix is `;` (e.g. `;help`, `;fight @user`, `;leaderboard dino`). Many
+Default prefix is `;` (e.g. `;help`, `;fight @user`, `;leaderboard dino`). Most
 games also have slash-command equivalents. Use `;help <command>` for per-command
 usage and instructions.
 
-## Project status & architecture
-
-This codebase is being incrementally refactored from a single-file bot toward a
-modular, cog-based package. The audit and roadmap driving that work live in
-[`docs/`](docs/):
-
-- [`docs/AUDIT.md`](docs/AUDIT.md) — full code/architecture/security audit
-- [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md) — roadmap + target folder structure
-- [`docs/RATE_LIMITS.md`](docs/RATE_LIMITS.md) — rate-limit prevention plan
-- [`docs/GITHUB_WORKFLOW.md`](docs/GITHUB_WORKFLOW.md) — branching, CI, deployment
-
-### Package layout
-
-Games are being moved out of the monolith into a `bot/` package, loaded as
-extensions from `setup_hook`. Tic-Tac-Toe is the first migrated game and the
-template for the rest:
-
-```
-bot/
-├─ games/      # pure rules, no discord imports (unit-testable) — e.g. tictactoe.py
-├─ views/      # discord UI (View/Button) — e.g. tictactoe.py
-├─ services/   # data access — scores.py (ScoreService over scores.db)
-└─ cogs/       # thin prefix+slash adapters — e.g. tictactoe.py
-```
-
-### Tests
+## Development
 
 ```bash
 pip install -r requirements-dev.txt
-pytest
+ruff check .          # lint
+ruff format .         # format
+pytest                # tests
 ```
 
-## Deploying updates
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs lint, format
+check, and tests on every push and pull request.
 
-The bot still launches via `python minigames.py`; the `bot/` package is loaded
-at runtime, so deploy the whole repo folder together. After uploading new code:
+## Deployment
 
-1. Ensure `DISCORD_TOKEN` (and any optional keys) are set in the environment or
-   in a `.env` file next to `minigames.py`.
-2. `pip install -r requirements.txt`
-3. Restart the bot process.
-4. In Discord, run `;sync` once (owner only) to refresh slash commands.
+The bot launches with `python -m bot` from the repository root. Set the
+environment variables on the host (e.g. a systemd `EnvironmentFile`, or a `.env`
+file in the working directory), then:
+
+```bash
+pip install -r requirements.txt
+python -m bot
+```
+
+After deploying command changes, run `;sync` once in Discord (owner only) to
+refresh the slash commands.
+
+## Background
+
+The audit and refactor history that shaped this codebase live in [`docs/`](docs/):
+[`AUDIT.md`](docs/AUDIT.md), [`REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md),
+[`RATE_LIMITS.md`](docs/RATE_LIMITS.md), [`GITHUB_WORKFLOW.md`](docs/GITHUB_WORKFLOW.md).

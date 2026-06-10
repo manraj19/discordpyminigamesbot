@@ -24,10 +24,10 @@ class TicTacToeGame:
 
     def _lines(self):
         b = self.board
-        yield from b                                   # rows
-        for c in range(3):                             # columns
+        yield from b  # rows
+        for c in range(3):  # columns
             yield [b[0][c], b[1][c], b[2][c]]
-        yield [b[0][0], b[1][1], b[2][2]]              # diagonals
+        yield [b[0][0], b[1][1], b[2][2]]  # diagonals
         yield [b[0][2], b[1][1], b[2][0]]
 
     def winner(self):

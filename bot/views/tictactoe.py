@@ -15,7 +15,7 @@ class TicTacToeButton(discord.ui.Button):
         self._col = col
 
     async def callback(self, interaction: discord.Interaction):
-        view: "TicTacToeView" = self.view
+        view: TicTacToeView = self.view
 
         if interaction.user != view.current_player:
             await interaction.response.send_message("It's not your turn!", ephemeral=True)

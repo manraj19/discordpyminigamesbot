@@ -8,18 +8,18 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core.utils import invalid_opponent
 from bot.views.tictactoe import TicTacToeView
 
 GAME = "tictactoe"
 
 
 class TicTacToe(commands.Cog):
-    def __init__(self, bot, scores):
+    def __init__(self, bot):
         self.bot = bot
-        self.scores = scores
 
     async def _record_win(self, member):
-        self.scores.record_result(member.id, str(member), 1, GAME)
+        self.bot.scores.record_result(member.id, str(member), 1, GAME)
 
     async def _start(self, send, challenger, opponent):
         """Shared game starter. ``send(content, view)`` must send the message
@@ -30,19 +30,10 @@ class TicTacToe(commands.Cog):
             view,
         )
 
-    @staticmethod
-    def _reject(opponent, author):
-        """Return a rejection message if the matchup is invalid, else None."""
-        if opponent == author:
-            return "You cannot play against yourself!"
-        if opponent.bot:
-            return "You cannot play against a bot!"
-        return None
-
     @commands.command(name="tictactoe", aliases=["ttt"])
     @commands.cooldown(1, 20, commands.BucketType.user)
     async def tictactoe_prefix(self, ctx, opponent: discord.Member):
-        reason = self._reject(opponent, ctx.author)
+        reason = invalid_opponent(opponent, ctx.author)
         if reason:
             await ctx.send(reason)
             return
@@ -56,7 +47,7 @@ class TicTacToe(commands.Cog):
     @app_commands.describe(opponent="The member you want to play against")
     @app_commands.checks.cooldown(1, 20, key=lambda i: i.user.id)
     async def tictactoe_slash(self, interaction: discord.Interaction, opponent: discord.Member):
-        reason = self._reject(opponent, interaction.user)
+        reason = invalid_opponent(opponent, interaction.user)
         if reason:
             await interaction.response.send_message(reason, ephemeral=True)
             return
@@ -69,5 +60,4 @@ class TicTacToe(commands.Cog):
 
 
 async def setup(bot):
-    # bot.scores is attached by the entrypoint (see minigames.py setup_hook).
-    await bot.add_cog(TicTacToe(bot, bot.scores))
+    await bot.add_cog(TicTacToe(bot))
