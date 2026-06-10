@@ -10,6 +10,9 @@ dependencies = [
     "topggpy>=1.4.0",
 ]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]  # make the repo root importable so `import bot` works under bare `pytest`
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
