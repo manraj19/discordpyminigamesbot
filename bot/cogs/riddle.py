@@ -1,4 +1,4 @@
-"""Riddle - answer a random riddle within two minutes."""
+"""Riddle - solve a random riddle, with hints and forgiving answer matching."""
 
 import asyncio
 import random
@@ -8,55 +8,65 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.data import RIDDLES
+from bot.games.riddle import is_correct
 
-
-def _riddle_embed(question):
-    embed = discord.Embed(title="Riddle Time!", description=question, color=discord.Color.blue())
-    embed.set_footer(text="You have 2 minutes to answer.")
-    return embed
+RIDDLE_TIME = 60.0
 
 
 class Riddle(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    async def _play(self, channel, player):
+        riddle = random.choice(RIDDLES)
+        question, answer = riddle["question"], riddle["answer"]
+
+        embed = discord.Embed(title="🧩 Riddle Time!", description=question, color=discord.Color.blurple())
+        embed.set_footer(text=f"You have {int(RIDDLE_TIME)} seconds. Multiple guesses allowed — just type your answer!")
+        await channel.send(embed=embed)
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + RIDDLE_TIME
+        attempts = 0
+
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                await channel.send(f"⏰ Time's up! The answer was **{answer}**.")
+                return
+            try:
+                message = await self.bot.wait_for(
+                    "message",
+                    check=lambda m: m.author == player and m.channel == channel,
+                    timeout=remaining,
+                )
+            except asyncio.TimeoutError:
+                await channel.send(f"⏰ Time's up! The answer was **{answer}**.")
+                return
+
+            if is_correct(message.content, answer):
+                await channel.send(f"✅ Correct, {player.mention}! The answer was **{answer}**.")
+                return
+
+            attempts += 1
+            if attempts == 2:
+                letters = len(answer.replace(" ", ""))
+                await channel.send(
+                    f"❌ Not quite! Hint: it starts with **{answer[0].upper()}** and has **{letters}** letters. Keep trying!"
+                )
+            else:
+                await channel.send("❌ Not quite — try again!")
+
     @commands.command()
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def riddle(self, ctx):
-        riddle = random.choice(RIDDLES)
-        await ctx.send(embed=_riddle_embed(riddle["question"]))
-        try:
-            message = await self.bot.wait_for(
-                "message",
-                check=lambda m: m.author == ctx.author and m.channel == ctx.channel,
-                timeout=120.0,
-            )
-        except asyncio.TimeoutError:
-            await ctx.send(f"Time's up! The correct answer was: {riddle['answer']}")
-            return
-        if message.content.strip().lower() == riddle["answer"]:
-            await ctx.send("Correct! Well done!")
-        else:
-            await ctx.send(f"Incorrect! The correct answer was: {riddle['answer']}")
+        await self._play(ctx.channel, ctx.author)
 
     @app_commands.command(name="riddle", description="Solve a riddle")
     @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
     async def riddle_slash(self, interaction: discord.Interaction):
-        riddle = random.choice(RIDDLES)
-        await interaction.response.send_message(embed=_riddle_embed(riddle["question"]))
-        try:
-            message = await self.bot.wait_for(
-                "message",
-                check=lambda m: m.author == interaction.user and m.channel == interaction.channel,
-                timeout=120.0,
-            )
-        except asyncio.TimeoutError:
-            await interaction.followup.send(f"Time's up! The correct answer was: {riddle['answer']}")
-            return
-        if message.content.strip().lower() == riddle["answer"]:
-            await interaction.followup.send("Correct! Well done!")
-        else:
-            await interaction.followup.send(f"Incorrect! The correct answer was: {riddle['answer']}")
+        await interaction.response.send_message("🧩 Here's your riddle…")
+        await self._play(interaction.channel, interaction.user)
 
 
 async def setup(bot):

@@ -120,10 +120,6 @@
     "answer": "clock"
   },
   {
-    "question": "What has to be broken before you can use it?",
-    "answer": "egg"
-  },
-  {
     "question": "What can you hold in your right hand but not in your left?",
     "answer": "left hand"
   },
@@ -156,10 +152,6 @@
     "answer": "river"
   },
   {
-    "question": "What comes down but never goes up?",
-    "answer": "rain"
-  },
-  {
     "question": "What begins with T, ends with T, and has T in it?",
     "answer": "teapot"
   },
@@ -170,10 +162,6 @@
   {
     "question": "What starts with 'e' and ends with 'e' but only has one letter in it?",
     "answer": "envelope"
-  },
-  {
-    "question": "The more of this there is, the less you see. What is it?",
-    "answer": "darkness"
   },
   {
     "question": "What can travel around the world while staying in the same spot?",
@@ -200,72 +188,20 @@
     "answer": "window"
   },
   {
-    "question": "What has to be broken before you can use it?",
-    "answer": "egg"
-  },
-  {
-    "question": "I’m tall when I’m young, and I’m short when I’m old. What am I?",
-    "answer": "candle"
-  },
-  {
-    "question": "What can’t talk but will reply when spoken to?",
-    "answer": "echo"
-  },
-  {
-    "question": "The more you take, the more you leave behind. What am I?",
-    "answer": "footsteps"
-  },
-  {
     "question": "What has one eye, but can’t see?",
     "answer": "needle"
   },
   {
-    "question": "What goes up but never comes down?",
-    "answer": "age"
-  },
-  {
     "question": "What can you catch, but not throw?",
     "answer": "cold"
-  },
-  {
-    "question": "I have cities, but no houses. I have mountains, but no trees. I have water, but no fish. What am I?",
-    "answer": "map"
   },
   {
     "question": "What has many keys but can’t open a single lock?",
     "answer": "piano"
   },
   {
-    "question": "What can run but never walks, has a mouth but never talks, has a head but never weeps, has a bed but never sleeps?",
-    "answer": "river"
-  },
-  {
-    "question": "What can travel around the world while staying in one corner?",
-    "answer": "stamp"
-  },
-  {
-    "question": "What gets wetter as it dries?",
-    "answer": "towel"
-  },
-  {
-    "question": "The more you take, the more you leave behind. What am I?",
-    "answer": "footsteps"
-  },
-  {
-    "question": "I’m tall when I’m young, and I’m short when I’m old. What am I?",
-    "answer": "candle"
-  },
-  {
-    "question": "What has a head, a tail, but no body?",
-    "answer": "coin"
-  },
-  {
     "question": "What is full of holes but still holds water?",
     "answer": "sponge"
-  },
-  {
-    "question": "What can you catch, but not throw?",
-    "answer": "cold"
   },
   {
     "question": "What has teeth but cannot bite?",
@@ -274,14 +210,6 @@
   {
     "question": "What is so light that even the strongest man cannot hold it for more than a few minutes?",
     "answer": "breath"
-  },
-  {
-    "question": "What can fill a room but takes up no space?",
-    "answer": "light"
-  },
-  {
-    "question": "What is full of holes but still holds water?",
-    "answer": "sponge"
   },
   {
     "question": "What is always running but never gets anywhere?",
@@ -302,10 +230,6 @@
   {
     "question": "What has words, but never speaks?",
     "answer": "book"
-  },
-  {
-    "question": "The more you take, the more you leave behind. What am I?",
-    "answer": "footsteps"
   },
   {
     "question": "I have keys but no locks. I have a space but no room. You can enter, but you can’t go outside. What am I?",
@@ -336,20 +260,12 @@
     "answer": "mountain"
   },
   {
-    "question": "What comes down but never goes up?",
-    "answer": "rain"
-  },
-  {
     "question": "What can be cracked, made, told, and played?",
     "answer": "joke"
   },
   {
     "question": "What has a bottom at the top?",
     "answer": "legs"
-  },
-  {
-    "question": "What has an eye but cannot see?",
-    "answer": "storm"
   },
   {
     "question": "What is so fragile that even just mentioning it can break it?",
@@ -400,16 +316,8 @@
     "answer": "glove"
   },
   {
-    "question": "What has an eye but cannot see?",
-    "answer": "needle"
-  },
-  {
     "question": "What is black and white and read all over?",
     "answer": "newspaper"
-  },
-  {
-    "question": "What can be cracked, made, told, and played?",
-    "answer": "joke"
   },
   {
     "question": "What can go up a chimney down, but not down a chimney up?",
@@ -440,20 +348,8 @@
     "answer": "breath"
   },
   {
-    "question": "What has to be broken before you can use it?",
-    "answer": "egg"
-  },
-  {
     "question": "What is hard to see but easy to recognize once noticed?",
     "answer": "pattern"
-  },
-  {
-    "question": "What has a neck but no head?",
-    "answer": "bottle"
-  },
-  {
-    "question": "What is always in front of you but can’t be seen?",
-    "answer": "future"
   },
   {
     "question": "What has no doors, but can be entered?",
@@ -470,10 +366,6 @@
   {
     "question": "What runs around a house but doesn’t move?",
     "answer": "fence"
-  },
-  {
-    "question": "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?",
-    "answer": "echo"
   },
   {
     "question": "What has a face and two hands but no arms or legs?",
@@ -516,28 +408,12 @@
     "answer": "charcoal"
   },
   {
-    "question": "What has a neck but no head?",
-    "answer": "bottle"
-  },
-  {
     "question": "What has many teeth but cannot bite?",
     "answer": "comb"
   },
   {
-    "question": "What is always in front of you but can’t be seen?",
-    "answer": "future"
-  },
-  {
     "question": "What gets sharper the more you use it?",
     "answer": "brain"
-  },
-  {
-    "question": "What goes up but never comes down?",
-    "answer": "age"
-  },
-  {
-    "question": "What has one head, one foot, and four legs?",
-    "answer": "bed"
   },
   {
     "question": "What can be broken but is never held?",
@@ -552,24 +428,12 @@
     "answer": "road"
   },
   {
-    "question": "What can be cracked, made, told, and played?",
-    "answer": "joke"
-  },
-  {
     "question": "What has many keys but can’t open a lock?",
     "answer": "piano"
   },
   {
-    "question": "What flies without wings?",
-    "answer": "time"
-  },
-  {
     "question": "What runs but never walks?",
     "answer": "river"
-  },
-  {
-    "question": "What is full of holes but still holds water?",
-    "answer": "sponge"
   },
   {
     "question": "What has words but never speaks?",
@@ -580,24 +444,12 @@
     "answer": "deck of cards"
   },
   {
-    "question": "What comes down but never goes up?",
-    "answer": "rain"
-  },
-  {
     "question": "What word is always spelled incorrectly?",
     "answer": "incorrectly"
   },
   {
-    "question": "What gets bigger the more you take away?",
-    "answer": "hole"
-  },
-  {
     "question": "I’m not alive, but I can grow. I don’t have lungs, but I need air. What am I?",
     "answer": "fire"
-  },
-  {
-    "question": "What has 88 keys but can’t open a single door?",
-    "answer": "piano"
   },
   {
     "question": "What has hands but cannot clap?",
@@ -608,24 +460,12 @@
     "answer": "candle"
   },
   {
-    "question": "What has a heart that doesn’t beat?",
-    "answer": "artichoke"
-  },
-  {
     "question": "What can be touched but cannot be seen?",
     "answer": "thoughts"
   },
   {
     "question": "What has roots nobody sees and is taller than trees?",
     "answer": "mountain"
-  },
-  {
-    "question": "What can you catch but not throw?",
-    "answer": "cold"
-  },
-  {
-    "question": "What can fill a room but takes up no space?",
-    "answer": "light"
   },
   {
     "question": "What has many rings but no fingers?",
@@ -648,14 +488,6 @@
     "answer": "trouble"
   },
   {
-    "question": "What comes down but never goes up?",
-    "answer": "rain"
-  },
-  {
-    "question": "What has a bottom at the top?",
-    "answer": "legs"
-  },
-  {
     "question": "What has four legs, but can't walk?",
     "answer": "hair"
   },
@@ -674,10 +506,6 @@
   {
     "question": "What has a bed but never sleeps, can run but never walks?",
     "answer": "river"
-  },
-  {
-    "question": "What has to be broken before you can use it?",
-    "answer": "egg"
   },
   {
     "question": "What can run, but never walks; has a mouth, but never talks?",

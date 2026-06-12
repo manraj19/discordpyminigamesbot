@@ -4,22 +4,24 @@ import random
 
 import discord
 
+# Clean, directly-embeddable giphy URLs (the share-link "i.giphy.com/media/v1..."
+# form carries a tracking blob and often fails to render in an embed).
 ACTION_GIFS = {
-    "Light Attack": "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExcjZ4bXYzbmtlamtmMDZhMndob2NrY2YwZ29lODRqZWc1Y2JiZTExNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/AT9t5MK37Bzt90r3Wv/giphy.gif",
-    "Heavy Attack": "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGN0aG8yZHYyenFzaTJwaXdtdGRkNzVrNGw3aTRqNno2Z2w0MDc1MSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3ohc1292yKn6Z1saGs/giphy.gif",
-    "Crash Out": "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExamtud2F0NXhpem80d2V4ZjV3aXVmbjc0Z2Y5YXN4cDg4cDlxZnBpcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/ixYRj3H9HOzWE/giphy.gif",
-    "Dodge Success": "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExa3Zncmx2cnRoNGh3czVnZnEybTZ5Z2ZtMDRpM2Zrand2MHlnOTRwZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5TSxsJJuSXahO/giphy.gif",
-    "Dodge Fail": "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExMzluYWF2cmVpMjc2dDdqNXNrMWY4b2c0a3J1am52eHdrMXF6MDVtZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/kQiVNXM7Uehr82dfcZ/giphy.gif",
-    "Parry Success": "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExd2duN255dTJndDJpaHFkZDJuaDFsYTJmMjAxZXkzanNsdGF3YTl6byZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/QUvYmUKMfoUhuAoyhx/giphy.gif",
-    "Parry Fail": "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExNmw0M25pM3dxeGt2OWtyNWFzMjFmdGxybzlvOHkwbzBjcnh5NHRtYSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/XGP2jgGMR7lEgWnJ50/giphy.gif",
-    "Forfeit": "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExc29zbGs5bnR3NzJvNzl0dXBuOWJhYTE4YW01eGo2c3J4emZod3hwNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3ohs4kOJi0cKYTz8Hu/giphy.gif",
+    "Light Attack": "https://media.giphy.com/media/AT9t5MK37Bzt90r3Wv/giphy.gif",
+    "Heavy Attack": "https://media.giphy.com/media/3ohc1292yKn6Z1saGs/giphy.gif",
+    "Crash Out": "https://media.giphy.com/media/ixYRj3H9HOzWE/giphy.gif",
+    "Dodge Success": "https://media.giphy.com/media/5TSxsJJuSXahO/giphy.gif",
+    "Dodge Fail": "https://media.giphy.com/media/kQiVNXM7Uehr82dfcZ/giphy.gif",
+    "Parry Success": "https://media.giphy.com/media/QUvYmUKMfoUhuAoyhx/giphy.gif",
+    "Parry Fail": "https://media.giphy.com/media/XGP2jgGMR7lEgWnJ50/giphy.gif",
+    "Forfeit": "https://media.giphy.com/media/3ohs4kOJi0cKYTz8Hu/giphy.gif",
 }
-DEFAULT_GIF = "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExZHN6bTcwOWRsbmFqcjdiZnh6Y3pqbDgzaHJhcDljajBzeHRtZnRmMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/8tYqTxolfDB1tFmQ8L/giphy.gif"
+DEFAULT_GIF = "https://media.giphy.com/media/8tYqTxolfDB1tFmQ8L/giphy.gif"
 
 INSTRUCTIONS = (
     "Light attack: 5-15 damage, doesn't miss\n"
     "Heavy attack: 25-30 damage, 20 percent chance of missing\n"
-    "Crash Out: 60 damage, 50/50 chance of hitting either users\n"
+    "Crash Out: 60 damage, 50/50 chance of hitting either user\n"
     "Dodge: 60 percent success rate\n"
     "Parry: 30 percent success rate, does counter-damage if successful"
 )
@@ -62,7 +64,7 @@ class FirstMoveSelect(discord.ui.Select):
                 description=f"{interaction.user.mention} has forfeited the fight.",
                 color=discord.Color.red(),
             )
-            await interaction.response.send_message(embed=embed)
+            await interaction.response.edit_message(embed=embed, view=None)
             view.stop()
             return
 
@@ -110,7 +112,7 @@ class FightView(discord.ui.View):
         embed.add_field(name=f"{self.user1.name}'s HP", value=self.hp[self.user1], inline=True)
         embed.add_field(name=f"{self.user2.name}'s HP", value=self.hp[self.user2], inline=True)
         embed.add_field(name="Round", value=self.round, inline=True)
-        embed.add_field(name="Last Action", value=self.last_action, inline=False)
+        embed.add_field(name="Last Action", value=self.last_action or "​", inline=False)
         embed.set_image(url=_gif_for(self.last_action))
         await interaction.response.edit_message(embed=embed, view=self)
 
@@ -118,6 +120,7 @@ class FightView(discord.ui.View):
         embed = discord.Embed(title="Game Over", description=f"{winner.mention} wins!")
         embed.add_field(name=f"{self.user1.name}'s HP", value=self.hp[self.user1], inline=True)
         embed.add_field(name=f"{self.user2.name}'s HP", value=self.hp[self.user2], inline=True)
+        embed.set_image(url=_gif_for(self.last_action))
         await interaction.response.edit_message(embed=embed, view=None)
         if self.on_win:
             await self.on_win(winner)
@@ -131,43 +134,49 @@ class FightView(discord.ui.View):
                 pass
         self.stop()
 
-    async def next_turn(self, interaction, skip_defense=False):
+    async def _finish_if_dead(self, interaction):
+        """End the game the moment a player's HP reaches 0."""
         if self.hp[self.user1] <= 0:
             await self.end_game(interaction, self.user2)
-            return
+            return True
         if self.hp[self.user2] <= 0:
             await self.end_game(interaction, self.user1)
+            return True
+        return False
+
+    def _advance_attacker(self):
+        self.phase = "attack"
+        self.attacker, self.defender = self.defender, self.attacker
+        self.turn = self.attacker
+        self.round += 1
+        self.enable_attack_buttons()
+        self.disable_defense_buttons()
+
+    async def next_turn(self, interaction, skip_defense=False):
+        # 1) A normal attack hands control to the defender first.
+        if self.phase == "attack" and not skip_defense:
+            self.phase = "defense"
+            self.turn = self.defender
+            self.enable_defense_buttons()
+            self.disable_attack_buttons()
+            await self.update_embed(interaction)
             return
 
-        if self.phase == "attack":
-            if skip_defense:
-                damage = self.attack_move.get("damage", 0)
-                if self.attack_move.get("self_damage"):
-                    self.hp[self.attacker] -= damage
-                    self.last_action = f"{self.attacker.mention} dealt {damage} damage to themselves with a Crash Out!"
-                else:
-                    self.hp[self.defender] -= damage
-                    self.last_action = f"{self.attacker.mention} dealt {damage} damage to {self.defender.mention}."
-
-                self.phase = "attack"
-                self.attacker, self.defender = self.defender, self.attacker
-                self.turn = self.attacker
-                self.round += 1
-                self.enable_attack_buttons()
-                self.disable_defense_buttons()
+        # 2) Crash Out / missed Heavy Attack: damage (if any) lands immediately.
+        if self.phase == "attack" and skip_defense:
+            damage = self.attack_move.get("damage", 0)
+            if self.attack_move.get("self_damage"):
+                self.hp[self.attacker] = max(0, self.hp[self.attacker] - damage)
             else:
-                self.phase = "defense"
-                self.turn = self.defender
-                self.enable_defense_buttons()
-                self.disable_attack_buttons()
-        else:
-            self.phase = "attack"
-            self.attacker, self.defender = self.defender, self.attacker
-            self.turn = self.attacker
-            self.round += 1
-            self.enable_attack_buttons()
-            self.disable_defense_buttons()
+                self.hp[self.defender] = max(0, self.hp[self.defender] - damage)
 
+        # 3) Otherwise we're resolving a defense (damage already applied).
+        # In every damage-dealing path, check for a knockout BEFORE moving on,
+        # so the game ends on the killing blow rather than one move later.
+        if await self._finish_if_dead(interaction):
+            return
+
+        self._advance_attacker()
         await self.update_embed(interaction)
 
     def enable_attack_buttons(self):
@@ -196,20 +205,20 @@ class FightView(discord.ui.View):
                 self.last_action = f"{interaction.user.mention} dodged the attack from {self.attacker.mention}."
             else:
                 damage = self.attack_move["damage"]
-                self.hp[interaction.user] -= damage
+                self.hp[interaction.user] = max(0, self.hp[interaction.user] - damage)
                 self.last_action = (
                     f"{interaction.user.mention} failed to dodge and took {damage} damage from {self.attacker.mention}."
                 )
         elif defense_move == "Parry":
             if random.random() < 0.7:
                 damage = self.attack_move["damage"]
-                self.hp[interaction.user] -= damage
+                self.hp[interaction.user] = max(0, self.hp[interaction.user] - damage)
                 self.last_action = (
                     f"{interaction.user.mention} failed to parry and took {damage} damage from {self.attacker.mention}."
                 )
             else:
                 damage = self.attack_move["counter_damage"]
-                self.hp[self.attacker] -= damage
+                self.hp[self.attacker] = max(0, self.hp[self.attacker] - damage)
                 self.last_action = f"{interaction.user.mention} successfully parried and dealt {damage} damage to {self.attacker.mention}."
 
         await self.next_turn(interaction)

@@ -25,12 +25,14 @@ class Flagle(commands.Cog):
             code = random.choice(list(COUNTRIES))
             name = COUNTRIES[code]
             flag_url = f"https://flagsapi.com/{code}/flat/64.png"
-            end_time = discord.utils.utcnow().timestamp() + response_time
+            # utcnow() is timezone-aware UTC; .timestamp() is correct provided
+            # the host clock is synced (enable NTP on the droplet).
+            deadline = round(discord.utils.utcnow().timestamp() + response_time)
 
             embed.clear_fields()
             embed.description = (
                 f"Guess the country for this flag:\n[Flag Image]({flag_url})\n"
-                f"You have until <t:{int(end_time)}:R> to respond."
+                f"You have until <t:{deadline}:R> to respond."
             )
             embed.set_image(url=flag_url)
             await message.edit(embed=embed)
