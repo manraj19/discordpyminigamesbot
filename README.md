@@ -1,62 +1,63 @@
-# MiniGames — a Discord games bot
+# MiniGames
 
-A multiplayer **mini-games Discord bot** built with [discord.py](https://discordpy.readthedocs.io/).
-It bundles ~20 games and utilities — from Connect 4 and Blackjack to a full
-cricket-match simulator — with persistent scores and leaderboards. The bot runs
-sharded so it can scale across many servers, and supports both classic prefix
+A multiplayer mini-games Discord bot built with [discord.py](https://discordpy.readthedocs.io/).
+It has around 20 games and utilities, including Connect 4, Blackjack, and a full
+cricket-match simulator, with persistent scores and leaderboards. The bot runs
+sharded so it can scale across many servers, and it supports both classic prefix
 commands (`;`) and slash commands.
 
 > Live on [top.gg](https://top.gg/bot/1285070559087951974).
 
 ## Features
 
-**Games**
+Games:
 `dino` · `rockpaperscissors` · `connect4` · `tictactoe` · `fight` · `flagle` ·
-`mathematics` · `blackjack` · `8ball` · `truthordare` · `riddle` · `race`
+`mathematics` · `blackjack` · `8ball` · `truthordare` · `riddle` · `race` ·
+`wordguess` · `emojiguess`
 
-**Cricket**
-`simulate` (full two-innings match simulation) · `livecricket` · `playcricket`
+Cricket:
+`simulate` (a full two-innings match) · `livecricket` · `playcricket`
 
-**Utility**
+Utility:
 `profile` · `leaderboard` · `define` · `urbandictionary` · `botinfo` · `help`
 
-Scores for competitive games are tracked per user in SQLite and surfaced through
+Scores for competitive games are tracked per user in SQLite and shown through
 `;leaderboard <game>` and `;profile`.
 
 ## Tech stack
 
-- **Python 3.12**, **discord.py 2.4** (`AutoShardedBot`, app commands, UI views)
-- **aiohttp** for non-blocking external API calls (dictionary, Urban Dictionary, CricAPI, flags)
-- **SQLite** for score persistence
-- **topggpy** for Top.gg server-count posting
+- Python 3.12, discord.py 2.4 (`AutoShardedBot`, app commands, UI views)
+- aiohttp for non-blocking external API calls (dictionary, Urban Dictionary, CricAPI, flags)
+- SQLite for score persistence
+- topggpy for Top.gg server-count posting
 
 ## Architecture
 
-The bot is a small package with a strict separation of concerns, which keeps
-game rules testable and lets one core back both the prefix and slash version of
-each command:
+The bot is a small package that keeps game rules separate from Discord code, so
+the rules stay testable and one core can back both the prefix and slash version
+of each command:
 
 ```
 bot/
 ├─ __main__.py     # entry point (python -m bot)
 ├─ core/           # config, bot subclass, logging, error handling, embeds, utils
 ├─ clients/        # shared aiohttp HTTP client
-├─ services/       # scores.py — ScoreService over scores.db
-├─ data/           # static game data as JSON (countries, riddles, truth/dare, …)
-├─ games/          # PURE rules, no discord imports (unit-tested)
+├─ services/       # scores.py: ScoreService over scores.db
+├─ data/           # static game data as JSON (countries, riddles, words, and more)
+├─ games/          # pure rules, no discord imports (unit-tested)
 ├─ views/          # discord UI (View/Button/Select) classes
 └─ cogs/           # thin command adapters wiring prefix + slash to the above
 ```
 
 Design notes:
 
-- **`bot/games/` imports no discord.py**, so the rules are unit-testable in isolation.
-- Each cog exposes a single `_start()`/core used by **both** the prefix and slash
-  command, so the two never drift out of sync.
-- All one-time setup runs in `setup_hook` (not `on_ready`, which re-fires on every
-  reconnect); the command tree is synced manually via the owner-only `;sync`.
-- External HTTP uses one shared, non-blocking `aiohttp` session; secrets come from
-  the environment.
+- `bot/games/` imports no discord.py, so the rules can be unit-tested on their own.
+- Each cog has a single core function used by both the prefix and slash command,
+  so the two never drift apart.
+- One-time setup runs in `setup_hook`, not `on_ready` (which re-fires on every
+  reconnect). The command tree is synced manually with the owner-only `;sync`.
+- External HTTP uses one shared, non-blocking aiohttp session, and secrets come
+  from the environment.
 
 ## Getting started
 
@@ -78,8 +79,8 @@ python -m bot
 
 ## Configuration
 
-Secrets are read from environment variables (a local `.env` file is loaded
-automatically). See [.env.example](.env.example):
+Secrets are read from environment variables, and a local `.env` file is loaded
+automatically. See [.env.example](.env.example):
 
 | Variable | Required | Purpose |
 |---|---|---|
@@ -87,13 +88,13 @@ automatically). See [.env.example](.env.example):
 | `TOPGG_TOKEN` | no | Top.gg API token (server-count posting) |
 | `CRICAPI_KEY` | no | [CricAPI](https://cricapi.com/) key for `;livecricket` |
 
-Never commit `.env` — it's git-ignored.
+Never commit `.env`. It is git-ignored.
 
 ## Commands
 
-Default prefix is `;` (e.g. `;help`, `;fight @user`, `;leaderboard dino`). Most
-games also have slash-command equivalents. Use `;help <command>` for per-command
-usage and instructions.
+The default prefix is `;` (for example `;help`, `;fight @user`, `;leaderboard dino`).
+Most games also have slash-command equivalents. Use `;help <command>` for the
+usage and instructions of any command.
 
 ## Development
 
@@ -104,14 +105,14 @@ ruff format .         # format
 pytest                # tests
 ```
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs lint, format
-check, and tests on every push and pull request.
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs lint, the format
+check, and the tests on every push and pull request.
 
 ## Deployment
 
 The bot launches with `python -m bot` from the repository root. Set the
-environment variables on the host (e.g. a systemd `EnvironmentFile`, or a `.env`
-file in the working directory), then:
+environment variables on the host (a systemd `EnvironmentFile`, or a `.env` file
+in the working directory), then:
 
 ```bash
 pip install -r requirements.txt
@@ -123,6 +124,6 @@ refresh the slash commands.
 
 ## Background
 
-The audit and refactor history that shaped this codebase live in [`docs/`](docs/):
+The audit and refactor notes that shaped this codebase live in [`docs/`](docs/):
 [`AUDIT.md`](docs/AUDIT.md), [`REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md),
-[`RATE_LIMITS.md`](docs/RATE_LIMITS.md), [`GITHUB_WORKFLOW.md`](docs/GITHUB_WORKFLOW.md).
+[`RATE_LIMITS.md`](docs/RATE_LIMITS.md), and [`GITHUB_WORKFLOW.md`](docs/GITHUB_WORKFLOW.md).

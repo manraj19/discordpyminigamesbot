@@ -1,30 +1,30 @@
-# Refactor Roadmap — MiniGames Discord Bot
+# Refactor roadmap: MiniGames Discord bot
 
 > Phase 2. Goal: a maintainable, multi-developer codebase that can scale toward tens of thousands of guilds, while keeping the live `minigames.py` bot working throughout.
 
 ## Priorities
 
 ### High (correctness / stability / security)
-1. **Rotate all leaked secrets** (manual), then externalise to env vars + add `.gitignore`. ← PR #1
+1. **Rotate all leaked secrets** (manual), then externalise them to env vars and add `.gitignore`. (PR #1)
 2. `git init`, untrack `.venv`/`__pycache__`/`.db`, push a clean baseline.
-3. Convert all blocking `requests.get` → shared `aiohttp` session.
-4. Fix `simulate` message spam → one progressively-edited message / batched embed; add `timeout=` + channel checks to its `wait_for`s.
+3. Convert all blocking `requests.get` calls to a shared `aiohttp` session.
+4. Fix `simulate` message spam by using one progressively-edited message or batched embed, and add `timeout=` plus channel checks to its `wait_for`s.
 5. Move `add_cog` to `setup_hook`; remove beta's `on_ready` global sync.
-6. ~~Collapse the `minigames`/`minibeta` split into one codebase (beta = a branch).~~ **Done** — `minibeta.py` removed from the repo; the repo now tracks the production bot only. Beta-only games (Wordle/Trivia/WhatBeatsRock) can be ported into `minigames.py` later from git history (commit `1a91e0d`).
-7. Fix `fetch_data_with_retry` unbound-`response` bug; guard `FightView.on_timeout` DMs.
+6. ~~Collapse the `minigames`/`minibeta` split into one codebase (beta = a branch).~~ **Done.** `minibeta.py` was removed from the repo, which now tracks the production bot only. Beta-only games (Wordle/Trivia/WhatBeatsRock) can be ported into the package later from git history (commit `1a91e0d`).
+7. Fix the `fetch_data_with_retry` unbound-`response` bug; guard `FightView.on_timeout` DMs.
 
 ### Medium (maintainability)
 8. Extract a data-access layer (`aiosqlite`, one repository module); remove the global cursor.
-9. De-duplicate prefix vs slash via shared core functions.
+9. De-duplicate prefix and slash with shared core functions.
 10. Move static data (countries, riddles, truth/dare, 8ball, words) into `data/*.json`.
 11. Split into cogs (`cogs/games/*`, `cogs/utility.py`, `cogs/admin.py`).
-12. Replace `print` with `logging`; add a cache with TTL + max size.
-13. Fix `requirements.txt`; add `ruff` + `black`.
+12. Replace `print` with `logging`; add a cache with a TTL and a max size.
+13. Fix `requirements.txt`; add `ruff` and `black`.
 
 ### Low (nice-to-have)
 14. Unit tests for pure game logic (cricket sim, blackjack value, connect-4 win check).
-15. De-dup the riddle list; centralise colors/constants.
-16. Type hints + `mypy`; docstrings only where they add value.
+15. De-dup the riddle list; centralise colors and constants.
+16. Type hints and `mypy`; docstrings only where they add value.
 
 ## Proposed folder structure
 
@@ -41,7 +41,7 @@ minigames-bot/
 │  │  ├─ help.py
 │  │  ├─ games/              # fight, trivia, blackjack, connect4, tictactoe, rps, flagle, wordle, cricket
 │  │  └─ utility.py          # define, urban, 8ball, botinfo, profile, leaderboard
-│  ├─ games/                 # PURE logic, NO discord imports (unit-testable)
+│  ├─ games/                 # pure logic, no discord imports (unit-testable)
 │  ├─ views/                 # reusable View/Button/Select classes
 │  ├─ services/              # scores.py (ScoreRepository, aiosqlite), topgg.py
 │  ├─ clients/               # async HTTP wrappers + shared aiohttp session + TTL cache
@@ -53,30 +53,30 @@ minigames-bot/
 └─ .github/workflows/ci.yml
 ```
 
-Key rule: **`bot/games/` imports zero discord.py** — game rules are pure functions; cogs are thin adapters that call them and render embeds. This is what makes prefix+slash sharing and testing possible.
+Key rule: `bot/games/` imports zero discord.py. Game rules are pure functions, and cogs are thin adapters that call them and render embeds. That is what makes prefix/slash sharing and testing possible.
 
 ## Migration strategy
 
 **Change first (lowest risk, highest value)**
-- Secrets → env + git + `.gitignore` (PR #1). No behaviour change.
-- `requests` → `aiohttp` (PR #2). Same JSON, big stability win.
-- `simulate` message batching + `wait_for` timeouts (PR #3).
-- `setup_hook` / sync fixes (PR #4).
+- Secrets to env, plus git and `.gitignore` (PR #1). No behaviour change.
+- `requests` to `aiohttp` (PR #2). Same JSON, big stability win.
+- `simulate` message batching and `wait_for` timeouts (PR #3).
+- `setup_hook` and sync fixes (PR #4).
 
-**Change later (structural, behind the safety net of git + the above)**
-- Introduce `bot/` package and migrate **one game end-to-end** (Fight) as the template: pure logic in `bot/games/fight.py`, view in `bot/views/`, cog in `bot/cogs/games/fight.py` registering both prefix and slash from one core.
-- Repeat per game; keep the old monolith importing/working until each is moved.
+**Change later (structural, behind the safety net of git and the above)**
+- Introduce the `bot/` package and migrate one game end-to-end (Fight) as the template: pure logic in `bot/games/fight.py`, the view in `bot/views/`, and a cog in `bot/cogs/games/fight.py` that registers both prefix and slash from one core.
+- Repeat per game, and keep the old monolith working until each one is moved.
 - Swap the global cursor for `ScoreRepository` once a game depends on it.
 - Externalise static data to `data/*.json`.
 
-**Do NOT touch initially**
+**Do not touch initially**
 - The live DB schema and the `scores.db` data (preserve compatibility).
-- The production prefix `;` and existing command names/aliases.
-- Game *rules/balance* (fight damage values, cricket logic) — refactor structure, not behaviour.
+- The production prefix `;` and the existing command names and aliases.
+- Game rules and balance (fight damage values, cricket logic). Refactor structure, not behaviour.
 - Working slash commands that aren't causing problems.
 
 **Risks per change**
-- aiohttp swap: response-shape mismatch → mitigate with try/except + a manual test of each command.
-- simulate batching: changes message cadence (UX) → preserve content, reduce count.
-- setup_hook move: cog double-load edge cases → test reconnect.
-- Package migration: import-time registration differs from monolith → migrate incrementally, one cog at a time, never big-bang.
+- aiohttp swap: a response-shape mismatch, mitigated with try/except and a manual test of each command.
+- simulate batching: it changes message cadence (UX), so preserve the content and reduce the count.
+- setup_hook move: cog double-load edge cases, so test a reconnect.
+- Package migration: import-time registration differs from the monolith, so migrate incrementally, one cog at a time, never big-bang.
