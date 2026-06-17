@@ -93,7 +93,7 @@ class WordGuess(commands.Cog):
     @app_commands.command(name="wordguess", description="Guess the hidden 5-letter word in 6 tries")
     @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
     async def wordguess_slash(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🔤 **Word Guess** — find the 5-letter word!")
+        await interaction.response.send_message("🔤 Word Guess! Find the 5-letter word.")
         await self._play(interaction.channel, interaction.user)
 
 

@@ -45,7 +45,7 @@ class Admin(commands.Cog):
     async def servers(self, ctx):
         """List the servers the bot is in (largest first)."""
         guilds = sorted(self.bot.guilds, key=lambda g: g.member_count or 0, reverse=True)
-        lines = [f"`{g.id}` — {g.name} ({g.member_count or 0:,} members)" for g in guilds[:15]]
+        lines = [f"`{g.id}`  {g.name} ({g.member_count or 0:,} members)" for g in guilds[:15]]
         embed = embeds.branded(title=f"Servers ({len(guilds)})", description="\n".join(lines) or "None.")
         if len(guilds) > 15:
             embed.set_footer(text=f"Showing the 15 largest of {len(guilds)}.")
@@ -89,7 +89,7 @@ class Admin(commands.Cog):
         if not entries:
             await ctx.send("No users are blocked.")
             return
-        lines = [f"`{user_id}`" + (f" — {reason}" if reason else "") for user_id, reason in entries]
+        lines = [f"`{user_id}`" + (f" ({reason})" if reason else "") for user_id, reason in entries]
         await ctx.send(embed=embeds.branded(title=f"Blocked Users ({len(entries)})", description="\n".join(lines)))
 
     # --- maintenance ---
@@ -142,7 +142,7 @@ class Admin(commands.Cog):
     @commands.command()
     async def restart(self, ctx):
         """Stop the process. Under systemd (Restart=always) this restarts it."""
-        await ctx.send("Restarting…")
+        await ctx.send("Restarting the bot.")
         await self.bot.close()
 
 

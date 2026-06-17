@@ -40,8 +40,8 @@ class Cricket(commands.Cog):
     async def _replay(self, channel, team_name, innings_no, events, target=None):
         """Replay an innings as a single, live-updating scoreboard so it feels
         like watching the match unfold rather than reading a wall of text."""
-        embed = discord.Embed(title=f"🏏 {team_name} — Innings {innings_no}", color=0x1F8B4C)
-        embed.description = "The players walk out to the middle… 🏟️"
+        embed = discord.Embed(title=f"🏏 {team_name}: innings {innings_no}", color=0x1F8B4C)
+        embed.description = "The players are walking out. 🏟️"
         message = await channel.send(embed=embed)
 
         feed = []
@@ -77,8 +77,8 @@ class Cricket(commands.Cog):
         msg = await self._prompt(
             channel,
             author,
-            f"Enter the 11 players for **{team_name}** — best batsmen first, bowlers last "
-            "(comma-separated) — or type `fill` to auto-pick a balanced team:",
+            f"Enter the 11 players for **{team_name}**, comma-separated, with your best "
+            "batsmen first and bowlers last. Or type `fill` to auto-pick a balanced team:",
         )
         if msg is None:
             return None
@@ -132,10 +132,10 @@ class Cricket(commands.Cog):
         )
         await self._replay(channel, bat_name, 1, events1)
         await channel.send(
-            f"🏁 Innings over — **{bat_name}: {runs1}/{wickets1}** ({overs1} ov). Target: **{runs1 + 1}**."
+            f"🏁 Innings over. **{bat_name}: {runs1}/{wickets1}** ({overs1} ov). Target: **{runs1 + 1}**."
         )
         await asyncio.sleep(3)
-        await channel.send("— *Innings break* —")
+        await channel.send("*Innings break.*")
         await asyncio.sleep(2)
 
         # --- Second innings (the chase, played out live) ---
@@ -160,12 +160,12 @@ class Cricket(commands.Cog):
         embed = discord.Embed(title="📊 Match Summary", color=0x1F8B4C)
         embed.add_field(name="Result", value=result, inline=False)
         embed.add_field(
-            name=f"{bat_name} — {runs1}/{wickets1} ({overs1} ov)",
+            name=f"{bat_name}: {runs1}/{wickets1} ({overs1} ov)",
             value=f"```\n{tabulate(tb1, headers=bat_headers, tablefmt='grid')}\n```",
             inline=False,
         )
         embed.add_field(
-            name=f"{bowl_name} — {runs2}/{wickets2} ({overs2} ov)",
+            name=f"{bowl_name}: {runs2}/{wickets2} ({overs2} ov)",
             value=f"```\n{tabulate(tb2, headers=bat_headers, tablefmt='grid')}\n```",
             inline=False,
         )
@@ -238,7 +238,7 @@ class Cricket(commands.Cog):
     @app_commands.command(name="playcricket", description="Play a game of classic hand cricket")
     @app_commands.checks.cooldown(1, 30, key=lambda i: i.user.id)
     async def playcricket_slash(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🏏 Hand cricket — you're batting first!")
+        await interaction.response.send_message("🏏 Hand cricket! You're batting first.")
         await self._hand_cricket(interaction.channel, interaction.user)
 
     # --- live scores ---

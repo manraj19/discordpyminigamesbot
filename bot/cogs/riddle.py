@@ -22,7 +22,7 @@ class Riddle(commands.Cog):
         question, answer = riddle["question"], riddle["answer"]
 
         embed = discord.Embed(title="🧩 Riddle Time!", description=question, color=discord.Color.blurple())
-        embed.set_footer(text=f"You have {int(RIDDLE_TIME)} seconds. Multiple guesses allowed — just type your answer!")
+        embed.set_footer(text=f"You have {int(RIDDLE_TIME)} seconds, and you can guess as many times as you like.")
         await channel.send(embed=embed)
 
         loop = asyncio.get_running_loop()
@@ -55,7 +55,7 @@ class Riddle(commands.Cog):
                     f"❌ Not quite! Hint: it starts with **{answer[0].upper()}** and has **{letters}** letters. Keep trying!"
                 )
             else:
-                await channel.send("❌ Not quite — try again!")
+                await channel.send("❌ Not quite, try again!")
 
     @commands.command()
     @commands.cooldown(1, 10, commands.BucketType.user)
@@ -65,7 +65,7 @@ class Riddle(commands.Cog):
     @app_commands.command(name="riddle", description="Solve a riddle")
     @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
     async def riddle_slash(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🧩 Here's your riddle…")
+        await interaction.response.send_message("🧩 Here's your riddle.")
         await self._play(interaction.channel, interaction.user)
 
 

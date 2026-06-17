@@ -75,13 +75,13 @@ class Race(commands.Cog):
         for rnd in range(1, ROUNDS + 1):
             await asyncio.sleep(1)
             word = random.choice(WORDS)
-            await channel.send(f"**Round {rnd}/{ROUNDS}** — type `{word}`!")
+            await channel.send(f"**Round {rnd}/{ROUNDS}**: type `{word}`!")
             winner = await self._first_correct(check, word)
             if winner is None:
                 await channel.send(f"Nobody typed `{word}` in time! 😴")
             else:
                 scores[winner] += 1
-                await channel.send(f"✅ {winner.mention} got it!  **{scores[player1]}–{scores[player2]}**")
+                await channel.send(f"✅ {winner.mention} got it!  **{scores[player1]}-{scores[player2]}**")
 
         if scores[player1] > scores[player2]:
             result = f"🏆 {player1.mention} wins the race!"

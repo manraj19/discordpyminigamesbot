@@ -24,10 +24,10 @@ class Dino(commands.Cog):
             # as the host clock is synced (see deploy docs: enable NTP).
             deadline = round(discord.utils.utcnow().timestamp() + response_time)
             if obstacle == "cactus":
-                prompt = f"You're running towards a cactus. Respond <t:{deadline}:R> — type `jump` or `duck`."
+                prompt = f"You're running towards a cactus. Respond <t:{deadline}:R>. Type `jump` or `duck`."
                 correct = "jump"
             else:
-                prompt = f"A bird is flying towards you. Respond <t:{deadline}:R> — type `jump` or `duck`."
+                prompt = f"A bird is flying towards you. Respond <t:{deadline}:R>. Type `jump` or `duck`."
                 correct = "duck"
             await channel.send(prompt)
 
@@ -58,7 +58,7 @@ class Dino(commands.Cog):
     @app_commands.command(name="dino", description="Play a game of Dino Run")
     @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
     async def dino_slash(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🦖 **Dino Run** — get ready!")
+        await interaction.response.send_message("🦖 Dino Run! Get ready.")
         await self._play(interaction.channel, interaction.user)
 
 

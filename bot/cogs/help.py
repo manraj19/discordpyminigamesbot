@@ -90,7 +90,7 @@ COMMANDS = {
         "desc": "Guess the word or phrase from emojis.",
         "aliases": ["emoji"],
         "usage": f"{PREFIX}emojiguess",
-        "instructions": "You'll get a few emojis — type the word or phrase they represent.",
+        "instructions": "You'll get a few emojis. Type the word or phrase they represent.",
     },
     "simulate": {
         "desc": "Simulate a game of cricket.",

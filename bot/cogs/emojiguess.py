@@ -58,9 +58,11 @@ class EmojiGuess(commands.Cog):
             if attempts == 2:
                 words = answer.split()
                 shape = " ".join("_" * len(w) for w in words)
-                await channel.send(f"❌ Not quite! Hint: it starts with **{answer[0].upper()}** — `{shape}`")
+                await channel.send(
+                    f"❌ Not quite! Hint: it starts with **{answer[0].upper()}** and looks like `{shape}`."
+                )
             else:
-                await channel.send("❌ Not quite — try again!")
+                await channel.send("❌ Not quite, try again!")
 
     @commands.command(aliases=["emoji"])
     @commands.cooldown(1, 10, commands.BucketType.user)
@@ -70,7 +72,7 @@ class EmojiGuess(commands.Cog):
     @app_commands.command(name="emojiguess", description="Guess the word or phrase from emojis")
     @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
     async def emojiguess_slash(self, interaction: discord.Interaction):
-        await interaction.response.send_message("😀 **Emoji Guess** — decode the emojis!")
+        await interaction.response.send_message("😀 Emoji Guess! Decode the emojis.")
         await self._play(interaction.channel, interaction.user)
 
 

@@ -84,7 +84,7 @@ class Mathematics(commands.Cog):
         interaction: discord.Interaction,
         quiz_type: Literal["addition", "subtraction", "multiplication", "division"],
     ):
-        await interaction.response.send_message(f"🧮 **{quiz_type.capitalize()}** quiz — get ready!")
+        await interaction.response.send_message(f"🧮 {quiz_type.capitalize()} quiz! Get ready.")
         await self._play(interaction.channel, interaction.user, quiz_type)
 
 

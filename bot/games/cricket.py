@@ -122,7 +122,7 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
                 return runs, wickets, player_scores, player_wickets, events, chased, overs_played, balls_faced
 
         if wickets < 10:
-            emit(f"End of over {balls_bowled // 6} — {runs}/{wickets}.", "over")
+            emit(f"End of over {balls_bowled // 6}: {runs}/{wickets}.", "over")
 
     overs_played = balls_bowled // 6 + (balls_bowled % 6) / 10
     return runs, wickets, player_scores, player_wickets, events, chased, overs_played, balls_faced
