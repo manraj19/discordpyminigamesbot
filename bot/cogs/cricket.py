@@ -14,8 +14,8 @@ from bot.games.cricket import get_top_performers, simulate_innings
 
 OVERS_TO_MAX_BOWLER = {5: 1, 10: 2, 20: 4}
 HAND_CRICKET_OPTIONS = [1, 2, 3, 4, 6]
-PACE_NORMAL = 0.9  # seconds between ordinary deliveries in the live replay
-PACE_BIG = 1.5  # seconds to linger on wickets and milestones
+PACE_NORMAL = 1.4  # seconds between ordinary deliveries in the live replay
+PACE_BIG = 2.2  # seconds to linger on wickets and milestones
 
 
 class Cricket(commands.Cog):
