@@ -22,6 +22,8 @@ CATEGORIES = {
         "truthordare",
         "riddle",
         "race",
+        "wordguess",
+        "emojiguess",
     ],
     "Cricket": ["simulate", "livecricket", "playcricket"],
     "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo"],
@@ -77,6 +79,18 @@ COMMANDS = {
         "desc": "Race against another user.",
         "usage": f"{PREFIX}race <opponent>",
         "instructions": "Type the words in `backticks` as fast as you can!",
+    },
+    "wordguess": {
+        "desc": "Guess the hidden 5-letter word in 6 tries.",
+        "aliases": ["wg"],
+        "usage": f"{PREFIX}wordguess",
+        "instructions": "🟩 right letter & spot · 🟨 right letter, wrong spot · ⬛ not in the word.",
+    },
+    "emojiguess": {
+        "desc": "Guess the word or phrase from emojis.",
+        "aliases": ["emoji"],
+        "usage": f"{PREFIX}emojiguess",
+        "instructions": "You'll get a few emojis — type the word or phrase they represent.",
     },
     "simulate": {
         "desc": "Simulate a game of cricket.",

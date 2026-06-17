@@ -28,6 +28,8 @@ EXTENSIONS = [
     "bot.cogs.riddle",
     "bot.cogs.race",
     "bot.cogs.truthordare",
+    "bot.cogs.wordguess",
+    "bot.cogs.emojiguess",
     "bot.cogs.rps",
     "bot.cogs.tictactoe",
     "bot.cogs.connect4",

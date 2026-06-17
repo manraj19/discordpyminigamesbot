@@ -101,7 +101,9 @@ class Utility(commands.Cog):
     async def leaderboard_slash(
         self,
         interaction: discord.Interaction,
-        game: Literal["dino", "flagle", "fight", "connect4", "rockpaperscissors", "tictactoe"],
+        game: Literal[
+            "dino", "flagle", "fight", "connect4", "rockpaperscissors", "tictactoe", "wordguess", "emojiguess"
+        ],
     ):
         error, embed = self._leaderboard(game)
         await (interaction.response.send_message(error) if error else interaction.response.send_message(embed=embed))

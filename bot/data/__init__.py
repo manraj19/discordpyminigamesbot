@@ -12,8 +12,14 @@ def _load(name):
 
 
 COUNTRIES = _load("countries")  # {alpha2_code: country_name}
-CRICKET_NAMES = _load("cricket_names")  # list[str]
 TRUTH = _load("truth")  # list[str]
 DARE = _load("dare")  # list[str]
 RIDDLES = _load("riddles")  # list[{"question", "answer"}]
 EIGHT_BALL = _load("eight_ball")  # list[str]
+WORDS = _load("words")  # list[str] of 5-letter words
+EMOJI_PUZZLES = _load("emoji_puzzles")  # list[{"clue", "answer"}]
+
+_cricket = _load("cricket_names")  # {"batsmen": [...], "bowlers": [...]}
+CRICKET_BATSMEN = _cricket["batsmen"]
+CRICKET_BOWLERS = _cricket["bowlers"]
+CRICKET_NAMES = CRICKET_BATSMEN + CRICKET_BOWLERS

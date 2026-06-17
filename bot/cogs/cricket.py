@@ -9,11 +9,13 @@ from discord.ext import commands
 from tabulate import tabulate
 
 from bot.core import config
-from bot.data import CRICKET_NAMES
+from bot.data import CRICKET_BATSMEN, CRICKET_BOWLERS
 from bot.games.cricket import get_top_performers, simulate_innings
 
 OVERS_TO_MAX_BOWLER = {5: 1, 10: 2, 20: 4}
 HAND_CRICKET_OPTIONS = [1, 2, 3, 4, 6]
+PACE_NORMAL = 0.9  # seconds between ordinary deliveries in the live replay
+PACE_BIG = 1.5  # seconds to linger on wickets and milestones
 
 
 class Cricket(commands.Cog):
@@ -35,60 +37,72 @@ class Cricket(commands.Cog):
             await channel.send("You took too long to respond. The simulation has been cancelled.")
             return None
 
-    async def _send_highlights(self, channel, header, highlights):
-        await channel.send(header)
-        chunk = ""
-        for line in highlights:
-            if len(chunk) + len(line) + 1 > 1900:
-                await channel.send(chunk)
-                chunk = ""
-            chunk += line + "\n"
-        if chunk:
-            await channel.send(chunk)
+    async def _replay(self, channel, team_name, innings_no, events, target=None):
+        """Replay an innings as a single, live-updating scoreboard so it feels
+        like watching the match unfold rather than reading a wall of text."""
+        embed = discord.Embed(title=f"🏏 {team_name} — Innings {innings_no}", color=0x1F8B4C)
+        embed.description = "The players walk out to the middle… 🏟️"
+        message = await channel.send(embed=embed)
+
+        feed = []
+        for ev in events:
+            header = f"## {ev['runs']}/{ev['wickets']}\n`{ev['overs']} overs`"
+            if target is not None:
+                need = target + 1 - ev["runs"]
+                if need > 0:
+                    header += f"  ·  🎯 need **{need}** to win"
+            feed.append(ev["text"])
+            feed = feed[-5:]
+            embed.description = header + "\n\n" + "\n".join(feed)
+            embed.color = 0xE74C3C if ev["kind"] == "wicket" else 0xF1C40F if ev["kind"] == "milestone" else 0x1F8B4C
+            try:
+                await message.edit(embed=embed)
+            except discord.HTTPException:
+                pass
+            await asyncio.sleep(PACE_BIG if ev["kind"] in ("wicket", "milestone") else PACE_NORMAL)
+        return message
 
     @staticmethod
-    def _available_names(exclude=()):
-        return [name for name in CRICKET_NAMES if name not in exclude]
+    def _fill_team(exclude=()):
+        """Build a balanced XI: 6 specialist batsmen up top, 5 bowlers at the tail."""
+        bats = [n for n in CRICKET_BATSMEN if n not in exclude]
+        bowls = [n for n in CRICKET_BOWLERS if n not in exclude]
+        if len(bats) < 6 or len(bowls) < 5:
+            return None
+        return random.sample(bats, 6) + random.sample(bowls, 5)
 
     # --- simulate ---
+    async def _team_prompt(self, channel, author, team_name, exclude=()):
+        """Prompt for an XI (or 'fill'). Returns the player list, or None."""
+        msg = await self._prompt(
+            channel,
+            author,
+            f"Enter the 11 players for **{team_name}** — best batsmen first, bowlers last "
+            "(comma-separated) — or type `fill` to auto-pick a balanced team:",
+        )
+        if msg is None:
+            return None
+        if msg.content.lower().strip() == "fill":
+            team = self._fill_team(exclude=exclude)
+            if team is None:
+                await channel.send("Not enough players left in the roster to auto-fill. Please enter names manually.")
+            return team
+        return [p.strip() for p in msg.content.split(",")]
+
     async def _simulate(self, channel, author):
         team1_name = await self._prompt(channel, author, "Enter the name of Team 1:")
         if team1_name is None:
             return
-        team1_players = await self._prompt(
-            channel,
-            author,
-            f"Enter the names of the players for {team1_name.content} (comma-separated) or type 'fill' to auto-fill:",
-        )
-        if team1_players is None:
+        team1 = await self._team_prompt(channel, author, team1_name.content)
+        if team1 is None:
             return
-        if team1_players.content.lower() == "fill":
-            available = self._available_names()
-            if len(available) < 11:
-                await channel.send("Not enough members in the predefined list to auto-fill Team 1.")
-                return
-            team1 = random.sample(available, 11)
-        else:
-            team1 = team1_players.content.split(",")
 
         team2_name = await self._prompt(channel, author, "Enter the name of Team 2:")
         if team2_name is None:
             return
-        team2_players = await self._prompt(
-            channel,
-            author,
-            f"Enter the names of the players for {team2_name.content} (comma-separated) or type 'fill' to auto-fill:",
-        )
-        if team2_players is None:
+        team2 = await self._team_prompt(channel, author, team2_name.content, exclude=team1)
+        if team2 is None:
             return
-        if team2_players.content.lower() == "fill":
-            available = self._available_names(exclude=team1)
-            if len(available) < 11:
-                await channel.send("Not enough members in the predefined list to auto-fill Team 2.")
-                return
-            team2 = random.sample(available, 11)
-        else:
-            team2 = team2_players.content.split(",")
 
         overs_message = await self._prompt(
             channel,
@@ -102,73 +116,59 @@ class Cricket(commands.Cog):
         max_overs_per_bowler = OVERS_TO_MAX_BOWLER[overs]
 
         toss_winner = random.choice([team1_name.content, team2_name.content])
-        await channel.send(f"{toss_winner} won the toss and chose to bat first.")
+        await channel.send(f"🪙 **{toss_winner}** won the toss and chose to bat first!")
+        await asyncio.sleep(1.5)
 
         if toss_winner == team1_name.content:
             batting_team, bowling_team = team1, team2
-            batting_team_name, bowling_team_name = team1_name.content, team2_name.content
+            bat_name, bowl_name = team1_name.content, team2_name.content
         else:
             batting_team, bowling_team = team2, team1
-            batting_team_name, bowling_team_name = team2_name.content, team1_name.content
+            bat_name, bowl_name = team2_name.content, team1_name.content
 
-        runs1, wickets1, scores1, wickets_taken1, highlights1, _, overs1, balls_faced1 = simulate_innings(
+        # --- First innings (played out live) ---
+        runs1, wickets1, scores1, wkts1, events1, _c1, overs1, balls1 = simulate_innings(
             batting_team, bowling_team, overs, max_overs_per_bowler
         )
-        await self._send_highlights(channel, "\nFirst Innings Highlights:", highlights1)
-
-        top_batsmen1, top_bowlers1 = get_top_performers(scores1, wickets_taken1, balls_faced1)
-        top_batsmen1_table = tabulate(
-            top_batsmen1, headers=["Player", "Runs", "Balls Faced", "Strike Rate"], tablefmt="grid"
+        await self._replay(channel, bat_name, 1, events1)
+        await channel.send(
+            f"🏁 Innings over — **{bat_name}: {runs1}/{wickets1}** ({overs1} ov). Target: **{runs1 + 1}**."
         )
-        top_bowlers1_table = tabulate(top_bowlers1, headers=["Player", "Wickets"], tablefmt="grid")
+        await asyncio.sleep(3)
+        await channel.send("— *Innings break* —")
+        await asyncio.sleep(2)
 
-        first_innings_embed = discord.Embed(title="First Innings Summary", color=0x00FF00)
-        first_innings_embed.add_field(
-            name=f"Top Batsmen from {batting_team_name}", value=f"```\n{top_batsmen1_table}\n```", inline=False
-        )
-        first_innings_embed.add_field(
-            name=f"Top Bowlers from {bowling_team_name}", value=f"```\n{top_bowlers1_table}\n```", inline=False
-        )
-        first_innings_embed.add_field(
-            name="Score",
-            value=f"{batting_team_name}: {runs1} runs for {wickets1} wickets in {overs1} overs",
-            inline=False,
-        )
-        await channel.send(embed=first_innings_embed)
-
-        await asyncio.sleep(10)
-
-        runs2, wickets2, scores2, wickets_taken2, highlights2, _chased, overs2, balls_faced2 = simulate_innings(
+        # --- Second innings (the chase, played out live) ---
+        runs2, wickets2, scores2, wkts2, events2, _chased, overs2, balls2 = simulate_innings(
             bowling_team, batting_team, overs, max_overs_per_bowler, target=runs1
         )
-        await self._send_highlights(channel, "\nSecond Innings Highlights:", highlights2)
+        await self._replay(channel, bowl_name, 2, events2, target=runs1)
 
         if runs2 > runs1:
-            result = f"\n{bowling_team_name} wins by {10 - wickets2} wickets!"
+            result = f"🏆 **{bowl_name}** win by {10 - wickets2} wickets!"
         elif runs1 > runs2:
-            result = f"\n{batting_team_name} wins by {runs1 - runs2} runs!"
+            result = f"🏆 **{bat_name}** win by {runs1 - runs2} runs!"
         else:
-            result = "\nThe match is a tie!"
+            result = "🤝 The match is a tie!"
+        await channel.send(result)
+        await asyncio.sleep(1)
 
-        top_batsmen2, top_bowlers2 = get_top_performers(scores2, wickets_taken2, balls_faced2)
-        top_batsmen2_table = tabulate(
-            top_batsmen2, headers=["Player", "Runs", "Balls Faced", "Strike Rate"], tablefmt="grid"
-        )
-        top_bowlers2_table = tabulate(top_bowlers2, headers=["Player", "Wickets"], tablefmt="grid")
-
-        final_scores = [
-            [batting_team_name, runs1, wickets1, overs1],
-            [bowling_team_name, runs2, wickets2, overs2],
-        ]
-        final_scores_table = tabulate(final_scores, headers=["Team", "Runs", "Wickets", "Overs"], tablefmt="grid")
-
-        embed = discord.Embed(title="Cricket Match Simulation", color=0x00FF00)
+        # --- Scorecard summary ---
+        tb1, _ = get_top_performers(scores1, wkts1, balls1)
+        tb2, _ = get_top_performers(scores2, wkts2, balls2)
+        bat_headers = ["Player", "Runs", "Balls", "SR"]
+        embed = discord.Embed(title="📊 Match Summary", color=0x1F8B4C)
         embed.add_field(name="Result", value=result, inline=False)
-        embed.add_field(name="Top Batsmen in innings 1", value=f"```\n{top_batsmen1_table}\n```", inline=False)
-        embed.add_field(name="Top Bowlers in innings 1", value=f"```\n{top_bowlers1_table}\n```", inline=False)
-        embed.add_field(name="Top Batsmen in innings 2", value=f"```\n{top_batsmen2_table}\n```", inline=False)
-        embed.add_field(name="Top Bowlers in innings 2", value=f"```\n{top_bowlers2_table}\n```", inline=False)
-        embed.add_field(name="Final Scores", value=f"```\n{final_scores_table}\n```", inline=False)
+        embed.add_field(
+            name=f"{bat_name} — {runs1}/{wickets1} ({overs1} ov)",
+            value=f"```\n{tabulate(tb1, headers=bat_headers, tablefmt='grid')}\n```",
+            inline=False,
+        )
+        embed.add_field(
+            name=f"{bowl_name} — {runs2}/{wickets2} ({overs2} ov)",
+            value=f"```\n{tabulate(tb2, headers=bat_headers, tablefmt='grid')}\n```",
+            inline=False,
+        )
         await channel.send(embed=embed)
 
     @commands.command(aliases=["sim"])

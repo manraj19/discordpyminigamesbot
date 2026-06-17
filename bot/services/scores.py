@@ -17,7 +17,16 @@ import sqlite3
 NON_CUMULATIVE_GAMES = {"dino", "flagle"}
 
 # Games that appear on leaderboards and profiles.
-SUPPORTED_GAMES = ["dino", "flagle", "fight", "connect4", "rockpaperscissors", "tictactoe"]
+SUPPORTED_GAMES = [
+    "dino",
+    "flagle",
+    "fight",
+    "connect4",
+    "rockpaperscissors",
+    "tictactoe",
+    "wordguess",
+    "emojiguess",
+]
 
 
 class ScoreService:
