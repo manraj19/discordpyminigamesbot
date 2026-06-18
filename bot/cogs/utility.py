@@ -112,7 +112,6 @@ class Utility(commands.Cog):
             "emojiguess",
             "mathematics",
             "unscramble",
-            "guessnumber",
         ],
     ):
         error, embed = self._leaderboard(game)
