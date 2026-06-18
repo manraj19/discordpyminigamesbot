@@ -7,6 +7,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core.utils import run_countdown
+
 GAME = "dino"
 
 
@@ -20,14 +22,15 @@ class Dino(commands.Cog):
 
         while True:
             obstacle = random.choice(["cactus", "bird"])
-            secs = round(response_time)
+            secs = int(response_time)
             if obstacle == "cactus":
-                prompt = f"You're running towards a cactus. Respond within {secs}s. Type `jump` or `duck`."
+                prefix = "You're running towards a cactus! Type `jump` or `duck`."
                 correct = "jump"
             else:
-                prompt = f"A bird is flying towards you. Respond within {secs}s. Type `jump` or `duck`."
+                prefix = "A bird is flying towards you! Type `jump` or `duck`."
                 correct = "duck"
-            await channel.send(prompt)
+            msg = await channel.send(f"{prefix}  ⏳ **{secs}s**")
+            ticker = asyncio.create_task(run_countdown(msg, secs, prefix))
 
             try:
                 response = await self.bot.wait_for(
@@ -39,6 +42,8 @@ class Dino(commands.Cog):
                 )
             except asyncio.TimeoutError:
                 break
+            finally:
+                ticker.cancel()
 
             if response.content.lower() != correct:
                 break

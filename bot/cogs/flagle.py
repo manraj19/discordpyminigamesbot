@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core.utils import run_countdown
 from bot.data import COUNTRIES
 
 GAME = "flagle"
@@ -27,12 +28,11 @@ class Flagle(commands.Cog):
             flag_url = f"https://flagsapi.com/{code}/flat/64.png"
 
             embed.clear_fields()
-            embed.description = (
-                f"Guess the country for this flag:\n[Flag Image]({flag_url})\n"
-                f"You have {int(response_time)} seconds to respond."
-            )
+            embed.description = f"Guess the country for this flag:\n[Flag Image]({flag_url})"
             embed.set_image(url=flag_url)
-            await message.edit(embed=embed)
+            secs = int(response_time)
+            await message.edit(content=f"⏳ **{secs}s**", embed=embed)
+            ticker = asyncio.create_task(run_countdown(message, secs))
 
             try:
                 guess = await self.bot.wait_for(
@@ -43,6 +43,8 @@ class Flagle(commands.Cog):
             except asyncio.TimeoutError:
                 await send_text(f"Time's up! The correct answer was **{name}**. Your final score: {score}")
                 break
+            finally:
+                ticker.cancel()
 
             if guess.content.strip().lower() != name.lower():
                 await send_text(f"Wrong! The correct answer was **{name}**. Your final score: {score}")
@@ -52,7 +54,7 @@ class Flagle(commands.Cog):
             embed.clear_fields()
             embed.add_field(name="Result", value="Correct!", inline=False)
             embed.add_field(name="Score", value=str(score), inline=True)
-            await message.edit(embed=embed)
+            await message.edit(content="", embed=embed)
 
         self.bot.scores.record_result(author.id, str(author), score, GAME)
 

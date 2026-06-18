@@ -8,6 +8,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core.utils import run_countdown
+
 QUIZ_TYPES = ["addition", "subtraction", "multiplication", "division"]
 
 
@@ -37,7 +39,10 @@ class Mathematics(commands.Cog):
 
         while True:
             question, answer = _new_problem(quiz_type, difficulty)
-            await channel.send(f"Solve: {question}\nYou have {int(response_time)} seconds to answer.")
+            secs = int(response_time)
+            prefix = f"Solve: **{question}**"
+            msg = await channel.send(f"{prefix}  ⏳ **{secs}s**")
+            ticker = asyncio.create_task(run_countdown(msg, secs, prefix))
 
             try:
                 guess = await self.bot.wait_for(
@@ -48,6 +53,8 @@ class Mathematics(commands.Cog):
             except asyncio.TimeoutError:
                 await channel.send(f"Time's up! The correct answer was {answer}. Your score is {score}")
                 break
+            finally:
+                ticker.cancel()
 
             try:
                 if quiz_type == "division":
