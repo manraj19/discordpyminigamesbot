@@ -26,9 +26,7 @@ class GuessNumber(commands.Cog):
                 msg = await self.bot.wait_for(
                     "message",
                     check=lambda m: (
-                        m.author == player
-                        and m.channel == channel
-                        and m.content.strip().lstrip("-").isdigit()
+                        m.author == player and m.channel == channel and m.content.strip().lstrip("-").isdigit()
                     ),
                     timeout=GUESS_TIMEOUT,
                 )

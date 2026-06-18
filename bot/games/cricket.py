@@ -75,7 +75,9 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
         # One bowler bowls a whole over, can't bowl two in a row, and is capped
         # at overs/5. With 11 possible bowlers the cap is always satisfiable, so
         # the fallbacks below are just crash-insurance for pathological rosters.
-        candidates = [(b, i) for i, b in enumerate(bowling_team) if bowler_overs[b] < max_overs_per_bowler and b != last]
+        candidates = [
+            (b, i) for i, b in enumerate(bowling_team) if bowler_overs[b] < max_overs_per_bowler and b != last
+        ]
         if not candidates:
             candidates = [(b, i) for i, b in enumerate(bowling_team) if b != last]
         if not candidates:
@@ -138,7 +140,17 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
                 chased = True
                 emit(f"🎉 Chased down! {runs}/{wickets}.", "milestone")
                 overs_played = balls_bowled // 6 + (balls_bowled % 6) / 10
-                return runs, wickets, player_scores, player_wickets, events, chased, overs_played, balls_faced, bowler_overs
+                return (
+                    runs,
+                    wickets,
+                    player_scores,
+                    player_wickets,
+                    events,
+                    chased,
+                    overs_played,
+                    balls_faced,
+                    bowler_overs,
+                )
 
         striker, non_striker = non_striker, striker  # end of the over: strike rotates
         if wickets < 10:

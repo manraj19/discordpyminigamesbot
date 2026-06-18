@@ -102,8 +102,17 @@ class Utility(commands.Cog):
         self,
         interaction: discord.Interaction,
         game: Literal[
-            "dino", "flagle", "fight", "connect4", "rockpaperscissors", "tictactoe", "wordguess", "emojiguess",
-            "mathematics", "unscramble", "guessnumber",
+            "dino",
+            "flagle",
+            "fight",
+            "connect4",
+            "rockpaperscissors",
+            "tictactoe",
+            "wordguess",
+            "emojiguess",
+            "mathematics",
+            "unscramble",
+            "guessnumber",
         ],
     ):
         error, embed = self._leaderboard(game)
