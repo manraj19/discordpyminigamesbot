@@ -8,7 +8,6 @@ from discord import app_commands
 from discord.ext import commands
 from tabulate import tabulate
 
-from bot.core import config
 from bot.data import CRICKET_BATSMEN, CRICKET_BOWLERS
 from bot.games.cricket import get_top_performers, simulate_innings
 
@@ -154,9 +153,10 @@ class Cricket(commands.Cog):
         await asyncio.sleep(1)
 
         # --- Scorecard summary ---
-        tb1, _ = get_top_performers(scores1, wkts1, balls1)
-        tb2, _ = get_top_performers(scores2, wkts2, balls2)
+        tb1, bw1 = get_top_performers(scores1, wkts1, balls1)
+        tb2, bw2 = get_top_performers(scores2, wkts2, balls2)
         bat_headers = ["Player", "Runs", "Balls", "SR"]
+        bowl_headers = ["Player", "Wickets"]
         embed = discord.Embed(title="📊 Match Summary", color=0x1F8B4C)
         embed.add_field(name="Result", value=result, inline=False)
         embed.add_field(
@@ -165,8 +165,18 @@ class Cricket(commands.Cog):
             inline=False,
         )
         embed.add_field(
+            name=f"Top bowlers ({bowl_name})",
+            value=f"```\n{tabulate(bw1, headers=bowl_headers, tablefmt='grid')}\n```",
+            inline=False,
+        )
+        embed.add_field(
             name=f"{bowl_name}: {runs2}/{wickets2} ({overs2} ov)",
             value=f"```\n{tabulate(tb2, headers=bat_headers, tablefmt='grid')}\n```",
+            inline=False,
+        )
+        embed.add_field(
+            name=f"Top bowlers ({bat_name})",
+            value=f"```\n{tabulate(bw2, headers=bowl_headers, tablefmt='grid')}\n```",
             inline=False,
         )
         await channel.send(embed=embed)
@@ -240,40 +250,6 @@ class Cricket(commands.Cog):
     async def playcricket_slash(self, interaction: discord.Interaction):
         await interaction.response.send_message("🏏 Hand cricket! You're batting first.")
         await self._hand_cricket(interaction.channel, interaction.user)
-
-    # --- live scores ---
-    async def _live_result(self):
-        url = f"https://api.cricapi.com/v1/currentMatches?apikey={config.CRICAPI_KEY}&offset=0"
-        status, data = await self.bot.http_client.fetch_json(url)
-        if status != 200 or not data:
-            return "Could not fetch live cricket scores. Please try again later.", None
-        matches = data.get("data", [])
-        if not matches:
-            return "No live matches found.", None
-
-        embed = discord.Embed(title="Live Cricket Scores", color=0x11806A)
-        for match in matches:
-            if match.get("matchStarted") and not match.get("matchEnded"):
-                team1, team2 = match["teams"][0], match["teams"][1]
-                score = "\n".join(f"{s['inning']}: {s['r']}/{s['w']} in {s['o']} overs" for s in match.get("score", []))
-                status_text = match.get("status", "Status not available")
-                embed.add_field(
-                    name=f"{team1} vs {team2}", value=f"Score:\n{score}\nStatus: {status_text}", inline=False
-                )
-        return None, embed
-
-    @commands.command(aliases=["lc", "live"])
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def livecricket(self, ctx):
-        error, embed = await self._live_result()
-        await ctx.send(error) if error else await ctx.send(embed=embed)
-
-    @app_commands.command(name="livecricket", description="Get live cricket scores")
-    @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
-    async def livecricket_slash(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        error, embed = await self._live_result()
-        await (interaction.followup.send(error) if error else interaction.followup.send(embed=embed))
 
 
 async def setup(bot):

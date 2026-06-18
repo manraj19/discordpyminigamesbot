@@ -20,14 +20,12 @@ class Dino(commands.Cog):
 
         while True:
             obstacle = random.choice(["cactus", "bird"])
-            # utcnow() is timezone-aware UTC, so .timestamp() is correct as long
-            # as the host clock is synced (see deploy docs: enable NTP).
-            deadline = round(discord.utils.utcnow().timestamp() + response_time)
+            secs = round(response_time)
             if obstacle == "cactus":
-                prompt = f"You're running towards a cactus. Respond <t:{deadline}:R>. Type `jump` or `duck`."
+                prompt = f"You're running towards a cactus. Respond within {secs}s. Type `jump` or `duck`."
                 correct = "jump"
             else:
-                prompt = f"A bird is flying towards you. Respond <t:{deadline}:R>. Type `jump` or `duck`."
+                prompt = f"A bird is flying towards you. Respond within {secs}s. Type `jump` or `duck`."
                 correct = "duck"
             await channel.send(prompt)
 

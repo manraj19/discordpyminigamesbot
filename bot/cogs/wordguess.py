@@ -23,6 +23,13 @@ class WordGuess(commands.Cog):
     def _board(guesses):
         return "\n".join(f"`{word.upper()}`  {''.join(tiles)}" for word, tiles in guesses)
 
+    async def _is_word(self, word):
+        # Same dictionary API as ;define. A reachable 404 means "not a word";
+        # on any network error (status None) we allow the guess rather than punish it.
+        # ponytail: one API call per guess, reuses http_client, no new dep.
+        status, _ = await self.bot.http_client.fetch_json(f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}")
+        return status != 404
+
     async def _play(self, channel, player):
         answer = random.choice(WORDS)
         intro = discord.Embed(
@@ -52,6 +59,9 @@ class WordGuess(commands.Cog):
             guess = message.content.strip().lower()
             if not is_valid_guess(guess):
                 await channel.send("❌ Please type a **5-letter word** (letters only).")
+                continue
+            if guess != answer and not await self._is_word(guess):
+                await channel.send(f"❌ `{guess.upper()}` isn't a word. Try again (it won't cost a guess).")
                 continue
 
             attempts += 1

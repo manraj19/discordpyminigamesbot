@@ -16,7 +16,7 @@ Games:
 `wordguess` · `emojiguess`
 
 Cricket:
-`simulate` (a full two-innings match) · `livecricket` · `playcricket`
+`simulate` (a full two-innings match) · `playcricket`
 
 Utility:
 `profile` · `leaderboard` · `define` · `urbandictionary` · `botinfo` · `help`
@@ -27,7 +27,7 @@ Scores for competitive games are tracked per user in SQLite and shown through
 ## Tech stack
 
 - Python 3.12, discord.py 2.4 (`AutoShardedBot`, app commands, UI views)
-- aiohttp for non-blocking external API calls (dictionary, Urban Dictionary, CricAPI, flags)
+- aiohttp for non-blocking external API calls (dictionary, Urban Dictionary, flags)
 - SQLite for score persistence
 - topggpy for Top.gg server-count posting
 
@@ -86,7 +86,6 @@ automatically. See [.env.example](.env.example):
 |---|---|---|
 | `DISCORD_TOKEN` | yes | Discord bot token |
 | `TOPGG_TOKEN` | no | Top.gg API token (server-count posting) |
-| `CRICAPI_KEY` | no | [CricAPI](https://cricapi.com/) key for `;livecricket` |
 
 Never commit `.env`. It is git-ignored.
 

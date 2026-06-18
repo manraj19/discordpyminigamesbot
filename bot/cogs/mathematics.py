@@ -37,8 +37,7 @@ class Mathematics(commands.Cog):
 
         while True:
             question, answer = _new_problem(quiz_type, difficulty)
-            deadline = round(discord.utils.utcnow().timestamp() + response_time)
-            await channel.send(f"Solve: {question}\nYou have to answer <t:{deadline}:R>.")
+            await channel.send(f"Solve: {question}\nYou have {int(response_time)} seconds to answer.")
 
             try:
                 guess = await self.bot.wait_for(

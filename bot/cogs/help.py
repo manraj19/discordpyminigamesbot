@@ -25,7 +25,7 @@ CATEGORIES = {
         "wordguess",
         "emojiguess",
     ],
-    "Cricket": ["simulate", "livecricket", "playcricket"],
+    "Cricket": ["simulate", "playcricket"],
     "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo"],
 }
 
@@ -98,7 +98,6 @@ COMMANDS = {
         "usage": f"{PREFIX}simulate",
         "instructions": "Enter team and player names to simulate a match. 11 players per side, comma-separated.",
     },
-    "livecricket": {"desc": "Get live cricket scores.", "aliases": ["lc", "live"], "usage": f"{PREFIX}livecricket"},
     "playcricket": {
         "desc": "Play a game of classic hand cricket.",
         "aliases": ["play"],

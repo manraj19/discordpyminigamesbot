@@ -22,7 +22,6 @@ _load_dotenv()
 # --- Secrets (from environment) ---
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN", "")
 TOPGG_TOKEN = os.environ.get("TOPGG_TOKEN", "")
-CRICAPI_KEY = os.environ.get("CRICAPI_KEY", "")
 
 # --- Bot settings ---
 COMMAND_PREFIX = ";"
