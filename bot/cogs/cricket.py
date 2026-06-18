@@ -11,7 +11,6 @@ from tabulate import tabulate
 from bot.data import CRICKET_BATSMEN, CRICKET_BOWLERS
 from bot.games.cricket import get_top_performers, simulate_innings
 
-OVERS_TO_MAX_BOWLER = {5: 1, 10: 2, 20: 4}
 HAND_CRICKET_OPTIONS = [1, 2, 3, 4, 6]
 PACE_NORMAL = 1.4  # seconds between ordinary deliveries in the live replay
 PACE_BIG = 2.2  # seconds to linger on wickets and milestones
@@ -112,7 +111,7 @@ class Cricket(commands.Cog):
         if overs_message is None:
             return
         overs = int(overs_message.content)
-        max_overs_per_bowler = OVERS_TO_MAX_BOWLER[overs]
+        max_overs_per_bowler = overs // 5  # each bowler is capped at a fifth of the innings
 
         toss_winner = random.choice([team1_name.content, team2_name.content])
         await channel.send(f"🪙 **{toss_winner}** won the toss and chose to bat first!")
@@ -126,7 +125,7 @@ class Cricket(commands.Cog):
             bat_name, bowl_name = team2_name.content, team1_name.content
 
         # --- First innings (played out live) ---
-        runs1, wickets1, scores1, wkts1, events1, _c1, overs1, balls1 = simulate_innings(
+        runs1, wickets1, scores1, wkts1, events1, _c1, overs1, balls1, _bo1 = simulate_innings(
             batting_team, bowling_team, overs, max_overs_per_bowler
         )
         await self._replay(channel, bat_name, 1, events1)
@@ -138,7 +137,7 @@ class Cricket(commands.Cog):
         await asyncio.sleep(2)
 
         # --- Second innings (the chase, played out live) ---
-        runs2, wickets2, scores2, wkts2, events2, _chased, overs2, balls2 = simulate_innings(
+        runs2, wickets2, scores2, wkts2, events2, _chased, overs2, balls2, _bo2 = simulate_innings(
             bowling_team, batting_team, overs, max_overs_per_bowler, target=runs1
         )
         await self._replay(channel, bowl_name, 2, events2, target=runs1)

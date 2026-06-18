@@ -30,6 +30,8 @@ EXTENSIONS = [
     "bot.cogs.truthordare",
     "bot.cogs.wordguess",
     "bot.cogs.emojiguess",
+    "bot.cogs.unscramble",
+    "bot.cogs.guessnumber",
     "bot.cogs.rps",
     "bot.cogs.tictactoe",
     "bot.cogs.connect4",

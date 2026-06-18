@@ -24,6 +24,8 @@ CATEGORIES = {
         "race",
         "wordguess",
         "emojiguess",
+        "unscramble",
+        "guessnumber",
     ],
     "Cricket": ["simulate", "playcricket"],
     "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo"],
@@ -91,6 +93,18 @@ COMMANDS = {
         "aliases": ["emoji"],
         "usage": f"{PREFIX}emojiguess",
         "instructions": "You'll get a few emojis. Type the word or phrase they represent.",
+    },
+    "unscramble": {
+        "desc": "Unscramble the shuffled letters into a word.",
+        "aliases": ["scramble"],
+        "usage": f"{PREFIX}unscramble",
+        "instructions": "Rearrange the jumbled letters and type the word before the timer runs out.",
+    },
+    "guessnumber": {
+        "desc": "Guess the number between 1 and 1000.",
+        "aliases": ["gn", "higherlower"],
+        "usage": f"{PREFIX}guessnumber",
+        "instructions": "I'll say higher or lower after each guess until you find it.",
     },
     "simulate": {
         "desc": "Simulate a game of cricket.",

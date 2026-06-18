@@ -10,6 +10,7 @@ from discord.ext import commands
 
 from bot.core.utils import run_countdown
 
+GAME = "mathematics"
 QUIZ_TYPES = ["addition", "subtraction", "multiplication", "division"]
 
 
@@ -72,6 +73,8 @@ class Mathematics(commands.Cog):
             difficulty += 1
             response_time = max(5.0, response_time - 1.0)
             await channel.send("Correct!")
+
+        self.bot.scores.record_result(player.id, str(player), score, GAME)
 
     @commands.command(aliases=["math", "maths"])
     @commands.cooldown(1, 10, commands.BucketType.user)

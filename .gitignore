@@ -21,6 +21,9 @@ dist/
 *.sqlite
 *.sqlite3
 
+# Generated knowledge graph (build artifact)
+graphify-out/
+
 # OS / editor
 .DS_Store
 Thumbs.db

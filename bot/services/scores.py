@@ -14,7 +14,7 @@ planned next step and would not change its public interface.
 import sqlite3
 
 # Games where only a personal best is kept; everything else accumulates.
-NON_CUMULATIVE_GAMES = {"dino", "flagle"}
+NON_CUMULATIVE_GAMES = {"dino", "flagle", "mathematics"}
 
 # Games that appear on leaderboards and profiles.
 SUPPORTED_GAMES = [
@@ -26,6 +26,9 @@ SUPPORTED_GAMES = [
     "tictactoe",
     "wordguess",
     "emojiguess",
+    "mathematics",
+    "unscramble",
+    "guessnumber",
 ]
 
 
