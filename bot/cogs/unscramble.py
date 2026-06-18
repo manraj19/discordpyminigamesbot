@@ -11,7 +11,7 @@ from bot.core.utils import run_countdown
 from bot.data import WORDS
 
 GAME = "unscramble"
-ROUND_SECONDS = 20
+ROUND_SECONDS = 7
 
 
 def scramble(word):
