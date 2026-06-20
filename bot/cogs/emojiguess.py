@@ -51,7 +51,8 @@ class EmojiGuess(commands.Cog):
 
             if is_correct(message.content, answer):
                 await channel.send(f"✅ Correct, {player.mention}! It was **{answer}**.")
-                self.bot.scores.record_result(player.id, str(player), 1, GAME)
+                coins = self.bot.reward(player, 1, GAME)
+                await channel.send(f"🪙 **+{coins}** coins")
                 return
 
             attempts += 1

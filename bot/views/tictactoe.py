@@ -32,9 +32,9 @@ class TicTacToeButton(discord.ui.Button):
 
         if view.game.winner() is not None:
             view.disable_all()
-            await view.message.edit(content=f"{interaction.user.mention} wins! 🎉", view=view)
-            if view.on_win is not None:
-                await view.on_win(interaction.user)
+            coins = await view.on_win(interaction.user) if view.on_win is not None else 0
+            text = f"{interaction.user.mention} wins! 🎉" + (f"  ·  🪙 +{coins} coins" if coins else "")
+            await view.message.edit(content=text, view=view)
             view.stop()
             return
 

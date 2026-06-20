@@ -56,7 +56,8 @@ class Flagle(commands.Cog):
             embed.add_field(name="Score", value=str(score), inline=True)
             await message.edit(content="", embed=embed)
 
-        self.bot.scores.record_result(author.id, str(author), score, GAME)
+        coins = self.bot.reward(author, score, GAME)
+        await channel.send(f"🪙 **+{coins}** coins")
 
     @commands.command()
     @commands.cooldown(1, 10, commands.BucketType.user)

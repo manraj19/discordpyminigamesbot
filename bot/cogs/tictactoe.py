@@ -19,7 +19,7 @@ class TicTacToe(commands.Cog):
         self.bot = bot
 
     async def _record_win(self, member):
-        self.bot.scores.record_result(member.id, str(member), 1, GAME)
+        return self.bot.reward(member, 1, GAME)
 
     async def _start(self, send, challenger, opponent):
         """Shared game starter. ``send(content, view)`` must send the message

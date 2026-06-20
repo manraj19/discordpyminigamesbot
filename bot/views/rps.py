@@ -45,13 +45,11 @@ class RPSView(discord.ui.View):
         if result is None:
             outcome = "It's a tie!"
         elif result == "a":
-            outcome = f"{self.player.mention} wins!"
-            if self.on_winner:
-                await self.on_winner(self.player)
+            coins = await self.on_winner(self.player) if self.on_winner else 0
+            outcome = f"{self.player.mention} wins!" + (f"  ·  🪙 +{coins} coins" if coins else "")
         else:
-            outcome = f"{self.opponent.mention} wins!"
-            if self.on_winner:
-                await self.on_winner(self.opponent)
+            coins = await self.on_winner(self.opponent) if self.on_winner else 0
+            outcome = f"{self.opponent.mention} wins!" + (f"  ·  🪙 +{coins} coins" if coins else "")
 
         for item in self.children:
             item.disabled = True

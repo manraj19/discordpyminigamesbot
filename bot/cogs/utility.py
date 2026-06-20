@@ -9,6 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import config, embeds
+from bot.services.economy import TITLES
 from bot.services.scores import SUPPORTED_GAMES
 
 
@@ -120,6 +121,9 @@ class Utility(commands.Cog):
     # --- profile ---
     def _profile(self, user):
         embed = embeds.branded(title=f"{user}'s Game Profile")
+        title_id = self.bot.economy.equipped_title(user.id)
+        if title_id:
+            embed.description = f"*{TITLES[title_id][0]}*"
         embed.set_thumbnail(url=user.display_avatar.url)
         for game in SUPPORTED_GAMES:
             score = self.bot.scores.user_score(user.id, game)
@@ -128,6 +132,8 @@ class Utility(commands.Cog):
             else:
                 value = f"Score: {score}\nRank: {self.bot.scores.rank(game, score)}"
             embed.add_field(name=game.capitalize(), value=value, inline=True)
+        coins, streak = self.bot.economy.balance(user.id)
+        embed.add_field(name="🪙 Coins", value=f"{coins}\n🔥 {streak}-day streak", inline=True)
         return embed
 
     @commands.command()

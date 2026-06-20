@@ -15,7 +15,7 @@ class Connect4(commands.Cog):
         self.bot = bot
 
     async def _record_win(self, member):
-        self.bot.scores.record_result(member.id, str(member), 1, GAME)
+        return self.bot.reward(member, 1, GAME)
 
     async def _start(self, send, player, opponent):
         view = Connect4View(player, opponent, on_win=self._record_win)

@@ -237,7 +237,10 @@ class Cricket(commands.Cog):
         if bot_score > user_score:
             await channel.send(f"Bot wins!\n**Final scores**\nYou: {user_score}\nBot: {bot_score}")
         else:
-            await channel.send(f"You win!\n**Final scores**\nYou: {user_score}\nBot: {bot_score}")
+            coins = self.bot.reward(author, 1, "playcricket")
+            await channel.send(
+                f"You win!\n**Final scores**\nYou: {user_score}\nBot: {bot_score}\n🪙 **+{coins}** coins"
+            )
 
     @commands.command(aliases=["play"])
     @commands.cooldown(1, 30, commands.BucketType.user)

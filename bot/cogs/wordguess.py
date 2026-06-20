@@ -75,7 +75,8 @@ class WordGuess(commands.Cog):
                     color=discord.Color.green(),
                 )
                 await channel.send(embed=embed)
-                self.bot.scores.record_result(player.id, str(player), 1, GAME)
+                coins = self.bot.reward(player, 1, GAME)
+                await channel.send(f"🪙 **+{coins}** coins")
                 return
 
             tries_left = MAX_TRIES - attempts

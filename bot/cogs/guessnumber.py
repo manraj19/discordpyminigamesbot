@@ -39,7 +39,8 @@ class GuessNumber(commands.Cog):
             if guess == secret:
                 tries = "guess" if attempts == 1 else "guesses"
                 await channel.send(f"🎉 Got it in **{attempts}** {tries}! The number was **{secret}**.")
-                self.bot.scores.record_result(player.id, str(player), 1, GAME)
+                coins = self.bot.reward(player, 1, GAME)
+                await channel.send(f"🪙 **+{coins}** coins")
                 return
             await channel.send("Go higher ⬆️" if guess < secret else "Go lower ⬇️")
 

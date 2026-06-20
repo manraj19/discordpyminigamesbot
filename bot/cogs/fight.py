@@ -20,7 +20,7 @@ class Fight(commands.Cog):
         self.bot = bot
 
     async def _record_win(self, member):
-        self.bot.scores.record_result(member.id, str(member), 1, GAME)
+        return self.bot.reward(member, 1, GAME)
 
     @commands.command()
     @commands.cooldown(1, 40, commands.BucketType.user)

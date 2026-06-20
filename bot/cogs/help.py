@@ -17,7 +17,6 @@ CATEGORIES = {
         "fight",
         "flagle",
         "mathematics",
-        "blackjack",
         "8ball",
         "truthordare",
         "riddle",
@@ -28,6 +27,8 @@ CATEGORIES = {
         "guessnumber",
     ],
     "Cricket": ["simulate", "playcricket"],
+    "Gambling": ["blackjack", "coinflip", "slots"],
+    "Economy": ["daily", "balance", "shop", "buy", "richest"],
     "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo"],
 }
 
@@ -69,10 +70,23 @@ COMMANDS = {
         "instructions": "Categories: addition, subtraction, multiplication, division.",
     },
     "blackjack": {
-        "desc": "Play a game of Blackjack.",
+        "desc": "Play Blackjack against the bot, optionally wagering coins.",
         "aliases": ["bj"],
-        "usage": f"{PREFIX}blackjack",
-        "instructions": "Get as close to 21 as possible without going over. `hit` to draw or `stay` to hold.",
+        "usage": f"{PREFIX}blackjack [bet]",
+        "instructions": "Get as close to 21 as possible without going over. `hit` to draw or `stay` to hold. "
+        "Add a bet to wager coins: win pays double, a tie returns your bet.",
+    },
+    "coinflip": {
+        "desc": "Bet coins on a coin flip.",
+        "aliases": ["cf"],
+        "usage": f"{PREFIX}coinflip <bet> [heads|tails]",
+        "instructions": "Guess the side. A correct call pays double your bet.",
+    },
+    "slots": {
+        "desc": "Bet coins on the slot machine.",
+        "aliases": ["slot"],
+        "usage": f"{PREFIX}slots <bet>",
+        "instructions": "Three of a kind pays big, two of a kind returns your bet, anything else loses it.",
     },
     "8ball": {"desc": "Ask the magic 8-ball a question.", "usage": f"{PREFIX}8ball <question>"},
     "truthordare": {"desc": "Play a game of Truth or Dare.", "aliases": ["tod"], "usage": f"{PREFIX}truthordare"},
@@ -117,6 +131,31 @@ COMMANDS = {
         "aliases": ["play"],
         "usage": f"{PREFIX}playcricket",
         "instructions": "Don't guess the same number as the bot!",
+    },
+    "daily": {
+        "desc": "Claim your daily coins and build a streak.",
+        "usage": f"{PREFIX}daily",
+        "instructions": "Claim once a day. Consecutive days grow your streak and your reward.",
+    },
+    "balance": {
+        "desc": "Check your coin balance.",
+        "aliases": ["bal", "coins"],
+        "usage": f"{PREFIX}balance",
+    },
+    "shop": {
+        "desc": "Browse cosmetic titles you can buy with coins.",
+        "usage": f"{PREFIX}shop",
+        "instructions": "Buy a title with `;buy <id>`. Your equipped title shows on your profile.",
+    },
+    "buy": {
+        "desc": "Buy a cosmetic title from the shop.",
+        "usage": f"{PREFIX}buy <id>",
+        "instructions": "See available titles and their ids with `;shop`.",
+    },
+    "richest": {
+        "desc": "See the players with the most coins.",
+        "aliases": ["rich", "baltop"],
+        "usage": f"{PREFIX}richest",
     },
     "profile": {
         "desc": "View your profile.",

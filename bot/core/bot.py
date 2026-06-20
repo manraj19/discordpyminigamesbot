@@ -12,6 +12,7 @@ from bot.core import config
 from bot.core.checks import BlocklistCommandTree, global_blocklist_check
 from bot.core.errors import setup_error_handlers
 from bot.services.blocklist import BlocklistService
+from bot.services.economy import EconomyService, payout
 from bot.services.scores import ScoreService
 
 log = logging.getLogger(__name__)
@@ -32,10 +33,12 @@ EXTENSIONS = [
     "bot.cogs.emojiguess",
     "bot.cogs.unscramble",
     "bot.cogs.guessnumber",
+    "bot.cogs.economy",
     "bot.cogs.rps",
     "bot.cogs.tictactoe",
     "bot.cogs.connect4",
     "bot.cogs.blackjack",
+    "bot.cogs.gambling",
     "bot.cogs.flagle",
     "bot.cogs.fight",
 ]
@@ -53,6 +56,7 @@ class MiniGamesBot(commands.AutoShardedBot):
         )
         # Shared services (not bot.http - that name is taken by discord.py).
         self.scores = ScoreService()
+        self.economy = EconomyService()
         self.blocklist = BlocklistService()
         self.http_client = HttpClient()
         self.start_time = discord.utils.utcnow()
@@ -66,6 +70,15 @@ class MiniGamesBot(commands.AutoShardedBot):
             except Exception:
                 log.exception("Failed to load extension %s", extension)
 
+    def reward(self, user, score, game):
+        """Record a game result and pay out coins for it (the economy faucet).
+        One choke point so every game earns coins with a single, tunable formula."""
+        self.scores.record_result(user.id, str(user), score, game)
+        coins = payout(game, score)
+        if coins:
+            self.economy.add_coins(user.id, str(user), coins)
+        return coins
+
     async def on_ready(self):
         await self.change_presence(activity=discord.Game(name=f"{config.COMMAND_PREFIX}help"))
         log.info("Logged in as %s (%d guilds)", self.user, len(self.guilds))
@@ -73,5 +86,6 @@ class MiniGamesBot(commands.AutoShardedBot):
     async def close(self):
         await self.http_client.close()
         self.scores.close()
+        self.economy.close()
         self.blocklist.close()
         await super().close()

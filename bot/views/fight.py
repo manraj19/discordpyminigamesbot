@@ -117,13 +117,13 @@ class FightView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def end_game(self, interaction, winner):
-        embed = discord.Embed(title="Game Over", description=f"{winner.mention} wins!")
+        coins = await self.on_win(winner) if self.on_win else 0
+        description = f"{winner.mention} wins!" + (f"  ·  🪙 +{coins} coins" if coins else "")
+        embed = discord.Embed(title="Game Over", description=description)
         embed.add_field(name=f"{self.user1.name}'s HP", value=self.hp[self.user1], inline=True)
         embed.add_field(name=f"{self.user2.name}'s HP", value=self.hp[self.user2], inline=True)
         embed.set_image(url=_gif_for(self.last_action))
         await interaction.response.edit_message(embed=embed, view=None)
-        if self.on_win:
-            await self.on_win(winner)
         self.stop()
 
     async def on_timeout(self):

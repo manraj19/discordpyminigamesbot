@@ -64,11 +64,13 @@ class Connect4View(discord.ui.View):
         drop_piece(self.board, col, piece)
 
         if check_win(self.board, piece):
+            coins = await self.on_win(self.current) if self.on_win else 0
             embed = self.embed()
-            embed.set_footer(text=f"{self.current} wins! 🎉")
+            footer = f"{self.current} wins! 🎉"
+            if coins:
+                footer += f"  ·  🪙 +{coins} coins"
+            embed.set_footer(text=footer)
             await interaction.response.edit_message(embed=embed, view=None)
-            if self.on_win:
-                await self.on_win(self.current)
             self.stop()
             return
 

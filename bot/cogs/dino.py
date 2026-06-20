@@ -50,8 +50,8 @@ class Dino(commands.Cog):
             score += 1
             response_time = 1.8 if score >= 30 else max(2.0, response_time - 0.5)
 
-        await channel.send(f"Game over! Your final score is {score}.")
-        self.bot.scores.record_result(player.id, str(player), score, GAME)
+        coins = self.bot.reward(player, score, GAME)
+        await channel.send(f"Game over! Your final score is {score}. 🪙 **+{coins}** coins")
 
     @commands.command()
     @commands.cooldown(1, 10, commands.BucketType.user)

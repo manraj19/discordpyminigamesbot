@@ -3,6 +3,7 @@
 import discord
 
 from bot.games.blackjack import calculate_hand, create_deck
+from bot.games.gambling import settle_blackjack
 
 
 class BlackjackButton(discord.ui.Button):
@@ -38,9 +39,12 @@ class BlackjackButton(discord.ui.Button):
 
 
 class BlackjackView(discord.ui.View):
-    def __init__(self, player):
+    def __init__(self, player, *, bot=None, bet=0):
         super().__init__(timeout=180.0)
         self.player = player
+        self.bot = bot
+        self.bet = bet
+        self.settled = False
         self.deck = create_deck()
         self.player_hand = [self.draw_card(), self.draw_card()]
         self.dealer_hand = [self.draw_card(), self.draw_card()]
@@ -80,11 +84,29 @@ class BlackjackView(discord.ui.View):
         embed.add_field(name="Your Hand", value=f"{self.player_hand} (Score: {player_score})", inline=False)
         embed.add_field(name="Dealer's Hand", value=f"{self.dealer_hand} (Score: {dealer_score})", inline=False)
         embed.add_field(name="Result", value=result, inline=False)
+        if self.bet and self.bot is not None:
+            credit = settle_blackjack(result, self.bet)
+            if credit:
+                self.bot.economy.add_coins(self.player.id, str(self.player), credit)
+            net = credit - self.bet
+            coins_text = (
+                f"You won **+{net}** coins 🪙"
+                if net > 0
+                else "Push — your bet was returned 🪙"
+                if net == 0
+                else f"You lost **{self.bet}** coins 🪙"
+            )
+            embed.add_field(name="Coins", value=coins_text, inline=False)
+        self.settled = True
         self.clear_items()
         await interaction.response.edit_message(embed=embed, view=self)
         self.stop()
 
     async def on_timeout(self):
+        # Refund a still-pending wager so an AFK game doesn't quietly eat coins.
+        if self.bet and self.bot is not None and not self.settled:
+            self.bot.economy.add_coins(self.player.id, str(self.player), self.bet)
+            self.settled = True
         for item in self.children:
             item.disabled = True
         if self.message:

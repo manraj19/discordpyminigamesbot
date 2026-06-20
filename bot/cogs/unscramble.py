@@ -50,7 +50,8 @@ class Unscramble(commands.Cog):
 
         if guess.content.strip().lower() == answer:
             await channel.send(f"✅ Correct! It was **{answer.upper()}**.")
-            self.bot.scores.record_result(player.id, str(player), 1, GAME)
+            coins = self.bot.reward(player, 1, GAME)
+            await channel.send(f"🪙 **+{coins}** coins")
         else:
             await channel.send(f"❌ Nope, it was **{answer.upper()}**.")
 

@@ -74,7 +74,8 @@ class Mathematics(commands.Cog):
             response_time = max(5.0, response_time - 1.0)
             await channel.send("Correct!")
 
-        self.bot.scores.record_result(player.id, str(player), score, GAME)
+        coins = self.bot.reward(player, score, GAME)
+        await channel.send(f"🪙 **+{coins}** coins")
 
     @commands.command(aliases=["math", "maths"])
     @commands.cooldown(1, 10, commands.BucketType.user)
