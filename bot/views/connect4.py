@@ -2,6 +2,7 @@
 
 import discord
 
+from bot.core import emojis
 from bot.games.connect4 import (
     COLUMNS,
     PLAYER1_PIECE,
@@ -65,19 +66,15 @@ class Connect4View(discord.ui.View):
 
         if check_win(self.board, piece):
             coins = await self.on_win(self.current) if self.on_win else 0
-            embed = self.embed()
-            footer = f"{self.current} wins! 🎉"
+            content = f"{self.current.mention} wins! 🎉"
             if coins:
-                footer += f"  ·  🪙 +{coins} MiniCoins"
-            embed.set_footer(text=footer)
-            await interaction.response.edit_message(embed=embed, view=None)
+                content += f"  ·  {emojis.COIN} +{coins} MiniCoins"
+            await interaction.response.edit_message(content=content, embed=self.embed(), view=None)
             self.stop()
             return
 
         if check_tie(self.board):
-            embed = self.embed()
-            embed.set_footer(text="It's a tie! 😐")
-            await interaction.response.edit_message(embed=embed, view=None)
+            await interaction.response.edit_message(content="It's a tie! 😐", embed=self.embed(), view=None)
             self.stop()
             return
 

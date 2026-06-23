@@ -167,7 +167,7 @@ class Duel(commands.Cog):
         embed.add_field(
             name="Stats",
             value=f"{emojis.HEALTH} {stats['max_hp']}  {emojis.ENERGY} {stats['max_energy']}  "
-            f"🗡️ {stats['attack']}  {emojis.SHIELD} {stats['defense']}",
+            f"{emojis.DUEL} {stats['attack']}  {emojis.SHIELD} {stats['defense']}",
             inline=False,
         )
         embed.add_field(name="Gear", value=gear, inline=True)

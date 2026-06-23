@@ -1,6 +1,7 @@
 """Economy: a daily coin claim with a streak, a balance check, and a small
 cosmetic-title shop that coins are spent on."""
 
+import logging
 from typing import Literal
 
 import discord
@@ -10,6 +11,8 @@ from discord.ext import commands
 from bot.core import config, emojis
 from bot.games.achievements import ACHIEVEMENTS
 from bot.services.economy import TITLES
+
+log = logging.getLogger(__name__)
 
 TitleId = Literal["novice", "grinder", "sharpshooter", "highroller", "legend"]
 
@@ -29,7 +32,7 @@ class Economy(commands.Cog):
             )
         return discord.Embed(
             title="🪙 Daily reward claimed!",
-            description=f"+**{reward}** MiniCoins · {emojis.STREAK} **{streak}**-day streak · balance **{coins}** MiniCoins.",
+            description=f"{emojis.COIN} +**{reward}** MiniCoins · {emojis.STREAK} **{streak}**-day streak · balance **{coins}** MiniCoins.",
             color=discord.Color.gold(),
         )
 
@@ -150,6 +153,7 @@ class Economy(commands.Cog):
         try:
             voted = await client.get_user_vote(user.id)
         except Exception:
+            log.exception("Top.gg get_user_vote failed for user %s", user.id)
             return f"Couldn't reach Top.gg right now. Vote here: {link}"
         if not voted:
             return f"You haven't voted recently. Vote here, then run `;vote` again to claim: {link}"
