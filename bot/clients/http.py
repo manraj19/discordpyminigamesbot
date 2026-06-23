@@ -16,14 +16,17 @@ class HttpClient:
             self._session = aiohttp.ClientSession()
         return self._session
 
-    async def fetch_json(self, url):
+    async def fetch_json(self, url, *, headers=None, params=None):
         """GET ``url`` and return ``(status, parsed_json_or_None)``.
 
-        On any network/timeout/decoding error returns ``(None, None)`` so
-        callers can handle failure with a simple falsy check."""
+        ``content_type=None`` parses the body as JSON regardless of the
+        response's Content-Type header. On any network/timeout/decoding error
+        returns ``(None, None)`` so callers can handle failure with a falsy check."""
         session = await self._get_session()
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+            async with session.get(
+                url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
                 if response.status != 200:
                     return response.status, None
                 return response.status, await response.json(content_type=None)

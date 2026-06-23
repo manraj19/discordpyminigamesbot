@@ -146,16 +146,22 @@ class Economy(commands.Cog):
 
     # --- Top.gg vote rewards ---
     async def _vote(self, user):
+        # Call the Top.gg check endpoint directly. topggpy's get_user_vote only
+        # parses the JSON body when Content-Type is exactly
+        # "application/json; charset=utf-8" and crashes on the live API's
+        # response otherwise, so we fetch and parse it ourselves.
         link = config.TOPGG_VOTE
-        client = self.bot.topgg_client
-        if client is None:
+        if not config.TOPGG_TOKEN:
             return f"Vote for the bot here: {link}"
-        try:
-            voted = await client.get_user_vote(user.id)
-        except Exception:
-            log.exception("Top.gg get_user_vote failed for user %s", user.id)
+        status, data = await self.bot.http_client.fetch_json(
+            f"https://top.gg/api/bots/{config.BOT_ID}/check",
+            headers={"Authorization": config.TOPGG_TOKEN},
+            params={"userId": str(user.id)},
+        )
+        if status != 200 or not isinstance(data, dict):
+            log.warning("Top.gg vote check failed (status %s) for user %s", status, user.id)
             return f"Couldn't reach Top.gg right now. Vote here: {link}"
-        if not voted:
+        if not data.get("voted"):
             return f"You haven't voted recently. Vote here, then run `;vote` again to claim: {link}"
         claimed, reward, hours = self.bot.economy.claim_vote(user.id, str(user))
         if claimed:
