@@ -24,6 +24,9 @@ dist/
 # Generated knowledge graph (build artifact)
 graphify-out/
 
+# Planning/working docs (kept local only, not published to GitHub)
+docs/
+
 # OS / editor
 .DS_Store
 Thumbs.db
