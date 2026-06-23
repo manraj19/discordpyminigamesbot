@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core import emojis
 from bot.data import EMOJI_PUZZLES
 from bot.games.riddle import is_correct
 
@@ -19,6 +20,15 @@ class EmojiGuess(commands.Cog):
         self.bot = bot
 
     async def _play(self, channel, player):
+        if not self.bot.begin_session(player.id):
+            await channel.send("⚠️ Finish your current game first.")
+            return
+        try:
+            await self._run(channel, player)
+        finally:
+            self.bot.end_session(player.id)
+
+    async def _run(self, channel, player):
         puzzle = random.choice(EMOJI_PUZZLES)
         clue, answer = puzzle["clue"], puzzle["answer"]
 
@@ -52,7 +62,7 @@ class EmojiGuess(commands.Cog):
             if is_correct(message.content, answer):
                 await channel.send(f"✅ Correct, {player.mention}! It was **{answer}**.")
                 coins = self.bot.reward(player, 1, GAME)
-                await channel.send(f"🪙 **+{coins}** coins")
+                await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
                 return
 
             attempts += 1

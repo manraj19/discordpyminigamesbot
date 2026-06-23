@@ -16,7 +16,7 @@ class Blackjack(commands.Cog):
         if bet < 0:
             return "Your bet can't be negative."
         if bet > 0 and not self.bot.economy.spend(user.id, bet):
-            return "You don't have enough coins for that bet."
+            return "You don't have enough MiniCoins for that bet."
         return None
 
     @commands.command(aliases=["bj"])
@@ -29,8 +29,8 @@ class Blackjack(commands.Cog):
         view = BlackjackView(ctx.author, bot=self.bot, bet=bet)
         view.message = await ctx.send(embed=view.hidden_embed(), view=view)
 
-    @app_commands.command(name="blackjack", description="Play Blackjack against the bot (optionally wager coins)")
-    @app_commands.describe(bet="Coins to wager (leave at 0 to play for fun)")
+    @app_commands.command(name="blackjack", description="Play Blackjack against the bot (optionally wager MiniCoins)")
+    @app_commands.describe(bet="MiniCoins to wager (leave at 0 to play for fun)")
     @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
     async def blackjack_slash(self, interaction: discord.Interaction, bet: int = 0):
         error = self._take_bet(interaction.user, bet)

@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core import emojis
 from bot.core.utils import run_countdown
 from bot.data import WORDS
 
@@ -30,6 +31,15 @@ class Unscramble(commands.Cog):
         self.bot = bot
 
     async def _play(self, channel, player):
+        if not self.bot.begin_session(player.id):
+            await channel.send("⚠️ Finish your current game first.")
+            return
+        try:
+            await self._run(channel, player)
+        finally:
+            self.bot.end_session(player.id)
+
+    async def _run(self, channel, player):
         answer = random.choice(WORDS).lower()
         secs = ROUND_SECONDS
         prefix = f"🔀 Unscramble this word: **{scramble(answer).upper()}**"
@@ -51,7 +61,7 @@ class Unscramble(commands.Cog):
         if guess.content.strip().lower() == answer:
             await channel.send(f"✅ Correct! It was **{answer.upper()}**.")
             coins = self.bot.reward(player, 1, GAME)
-            await channel.send(f"🪙 **+{coins}** coins")
+            await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
         else:
             await channel.send(f"❌ Nope, it was **{answer.upper()}**.")
 

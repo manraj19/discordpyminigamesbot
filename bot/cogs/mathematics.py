@@ -8,6 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core import emojis
 from bot.core.utils import run_countdown
 
 GAME = "mathematics"
@@ -34,6 +35,15 @@ class Mathematics(commands.Cog):
         self.bot = bot
 
     async def _play(self, channel, player, quiz_type):
+        if not self.bot.begin_session(player.id):
+            await channel.send("⚠️ Finish your current game first.")
+            return
+        try:
+            await self._run(channel, player, quiz_type)
+        finally:
+            self.bot.end_session(player.id)
+
+    async def _run(self, channel, player, quiz_type):
         score = 0
         difficulty = 1
         response_time = 10.0
@@ -75,7 +85,7 @@ class Mathematics(commands.Cog):
             await channel.send("Correct!")
 
         coins = self.bot.reward(player, score, GAME)
-        await channel.send(f"🪙 **+{coins}** coins")
+        await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
 
     @commands.command(aliases=["math", "maths"])
     @commands.cooldown(1, 10, commands.BucketType.user)

@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 from tabulate import tabulate
 
+from bot.core import emojis
 from bot.data import CRICKET_BATSMEN, CRICKET_BOWLERS
 from bot.games.cricket import get_top_performers, simulate_innings
 
@@ -88,6 +89,15 @@ class Cricket(commands.Cog):
         return [p.strip() for p in msg.content.split(",")]
 
     async def _simulate(self, channel, author):
+        if not self.bot.begin_session(author.id):
+            await channel.send("⚠️ Finish your current game first.")
+            return
+        try:
+            await self._run_simulate(channel, author)
+        finally:
+            self.bot.end_session(author.id)
+
+    async def _run_simulate(self, channel, author):
         team1_name = await self._prompt(channel, author, "Enter the name of Team 1:")
         if team1_name is None:
             return
@@ -114,7 +124,7 @@ class Cricket(commands.Cog):
         max_overs_per_bowler = overs // 5  # each bowler is capped at a fifth of the innings
 
         toss_winner = random.choice([team1_name.content, team2_name.content])
-        await channel.send(f"🪙 **{toss_winner}** won the toss and chose to bat first!")
+        await channel.send(f"{emojis.COIN} **{toss_winner}** won the toss and chose to bat first!")
         await asyncio.sleep(1.5)
 
         if toss_winner == team1_name.content:
@@ -143,9 +153,9 @@ class Cricket(commands.Cog):
         await self._replay(channel, bowl_name, 2, events2, target=runs1)
 
         if runs2 > runs1:
-            result = f"🏆 **{bowl_name}** win by {10 - wickets2} wickets!"
+            result = f"{emojis.TROPHY} **{bowl_name}** win by {10 - wickets2} wickets!"
         elif runs1 > runs2:
-            result = f"🏆 **{bat_name}** win by {runs1 - runs2} runs!"
+            result = f"{emojis.TROPHY} **{bat_name}** win by {runs1 - runs2} runs!"
         else:
             result = "🤝 The match is a tie!"
         await channel.send(result)
@@ -188,11 +198,22 @@ class Cricket(commands.Cog):
     @app_commands.command(name="simulate", description="Simulate a full cricket match")
     @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)
     async def simulate_slash(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🏏 Starting a cricket simulation! Follow the prompts below.")
+        await interaction.response.send_message(
+            f"{emojis.BATBALL} Starting a cricket simulation! Follow the prompts below."
+        )
         await self._simulate(interaction.channel, interaction.user)
 
     # --- hand cricket ---
     async def _hand_cricket(self, channel, author):
+        if not self.bot.begin_session(author.id):
+            await channel.send("⚠️ Finish your current game first.")
+            return
+        try:
+            await self._run_hand_cricket(channel, author)
+        finally:
+            self.bot.end_session(author.id)
+
+    async def _run_hand_cricket(self, channel, author):
         user_score = 0
         bot_score = 0
 
@@ -239,7 +260,7 @@ class Cricket(commands.Cog):
         else:
             coins = self.bot.reward(author, 1, "playcricket")
             await channel.send(
-                f"You win!\n**Final scores**\nYou: {user_score}\nBot: {bot_score}\n🪙 **+{coins}** coins"
+                f"You win!\n**Final scores**\nYou: {user_score}\nBot: {bot_score}\n{emojis.COIN} **+{coins}** MiniCoins"
             )
 
     @commands.command(aliases=["play"])
@@ -250,7 +271,7 @@ class Cricket(commands.Cog):
     @app_commands.command(name="playcricket", description="Play a game of classic hand cricket")
     @app_commands.checks.cooldown(1, 30, key=lambda i: i.user.id)
     async def playcricket_slash(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🏏 Hand cricket! You're batting first.")
+        await interaction.response.send_message(f"{emojis.BATBALL} Hand cricket! You're batting first.")
         await self._hand_cricket(interaction.channel, interaction.user)
 
 

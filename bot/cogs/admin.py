@@ -10,8 +10,9 @@ import datetime
 import discord
 from discord.ext import commands
 
-from bot.core import config, embeds
+from bot.core import config, embeds, emojis
 from bot.services.scores import SUPPORTED_GAMES
+from bot.views.confirm import ConfirmView
 
 
 class Admin(commands.Cog):
@@ -40,6 +41,54 @@ class Admin(commands.Cog):
         per_game = "\n".join(f"{g.capitalize()}: {self.bot.scores.count(g)}" for g in SUPPORTED_GAMES)
         embed.add_field(name="Entries by game", value=per_game, inline=False)
         await ctx.send(embed=embed)
+
+    @commands.command()
+    async def givecoins(self, ctx, member: discord.Member, amount: int):
+        """Grant (or remove, with a negative amount) coins. For testing the economy."""
+        self.bot.economy.add_coins(member.id, str(member), amount)
+        coins, _ = self.bot.economy.balance(member.id)
+        await ctx.send(f"Gave {amount} MiniCoins to {member.mention}. Their balance is now {coins}.")
+
+    @commands.command()
+    async def disable(self, ctx, channel_id: int = None):
+        """Disable the bot in a channel. Defaults to the current channel."""
+        channel_id = channel_id or ctx.channel.id
+        self.bot.channel_lock.disable(channel_id)
+        await ctx.send(f"Disabled the bot in <#{channel_id}> (`{channel_id}`). Re-enable with `;enable {channel_id}`.")
+
+    @commands.command()
+    async def enable(self, ctx, channel_id: int = None):
+        """Re-enable the bot in a channel. Defaults to the current channel."""
+        channel_id = channel_id or ctx.channel.id
+        self.bot.channel_lock.enable(channel_id)
+        await ctx.send(f"Re-enabled the bot in <#{channel_id}> (`{channel_id}`).")
+
+    @commands.command()
+    async def disabledchannels(self, ctx):
+        """List the channels where the bot is disabled."""
+        ids = self.bot.channel_lock.all()
+        if not ids:
+            await ctx.send("No channels are disabled.")
+            return
+        await ctx.send("Disabled channels:\n" + "\n".join(f"<#{c}> (`{c}`)" for c in ids))
+
+    @commands.command()
+    async def resetseason(self, ctx):
+        """Reset the duel season (all ratings and trophies back to default)."""
+
+        async def do_reset(interaction):
+            champ = self.bot.duel.reset_season()
+            msg = "Season reset. Every duelist's rating and trophies are back to default."
+            if champ:
+                msg = f"{emojis.TROPHY} Season champion: **{champ[0]}** at {champ[1]} rating!\n" + msg
+            await interaction.followup.send(msg)
+
+        view = ConfirmView(ctx.author.id, do_reset)
+        view.message = await ctx.send(
+            "⚠️ Reset the duel season? This sets every duelist's rating and trophies back to default "
+            "and can't be undone.",
+            view=view,
+        )
 
     @commands.command()
     async def servers(self, ctx):

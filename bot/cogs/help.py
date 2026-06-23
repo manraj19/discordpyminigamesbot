@@ -28,7 +28,8 @@ CATEGORIES = {
     ],
     "Cricket": ["simulate", "playcricket"],
     "Gambling": ["blackjack", "coinflip", "slots"],
-    "Economy": ["daily", "balance", "shop", "buy", "richest"],
+    "Duel": ["duel", "ranked", "arena", "duelist", "duelshop", "buygear", "buyability", "equip", "loadout", "duelrank"],
+    "Economy": ["daily", "balance", "shop", "buy", "richest", "achievements", "vote"],
     "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo"],
 }
 
@@ -58,6 +59,43 @@ COMMANDS = {
         "Crash Out: 60 damage, 50/50 chance of hitting either user\nDodge: 60% success rate\n"
         "Parry: 30% success rate, deals counter-damage if successful",
     },
+    "duel": {
+        "desc": "Challenge someone to a casual combat duel (optionally wager MiniCoins).",
+        "usage": f"{PREFIX}duel <opponent> [bet]",
+        "instructions": "Deterministic, turn-based combat: manage energy, use your kit, drop the foe to 0 HP. "
+        "Add a bet to wager MiniCoins (both ante, winner takes the pot).",
+    },
+    "ranked": {
+        "desc": "Challenge someone to a ranked duel (ELO, no MiniCoins).",
+        "usage": f"{PREFIX}ranked <opponent>",
+        "instructions": "Moves your ELO rating and awards trophies. Blocked if your ratings are too far apart.",
+    },
+    "arena": {
+        "desc": "Duel a scaling AI for MiniCoins and XP.",
+        "aliases": ["pve"],
+        "usage": f"{PREFIX}arena",
+    },
+    "duelist": {
+        "desc": "View a duelist profile (level, rating, gear, loadout).",
+        "usage": f"{PREFIX}duelist [member]",
+    },
+    "duelshop": {
+        "desc": "Browse duel gear and unlockable abilities.",
+        "usage": f"{PREFIX}duelshop",
+    },
+    "buygear": {"desc": "Buy a piece of duel gear.", "usage": f"{PREFIX}buygear <id>"},
+    "buyability": {"desc": "Unlock a duel ability.", "usage": f"{PREFIX}buyability <id>"},
+    "equip": {"desc": "Equip owned duel gear.", "usage": f"{PREFIX}equip <id>"},
+    "loadout": {
+        "desc": "Set your duel ability loadout.",
+        "usage": f"{PREFIX}loadout",
+        "instructions": "Opens a dropdown to pick up to 4 abilities. Strike is always included.",
+    },
+    "duelrank": {
+        "desc": "See the duel rating leaderboard.",
+        "aliases": ["duelboard"],
+        "usage": f"{PREFIX}duelrank",
+    },
     "flagle": {
         "desc": "Play a flag quiz.",
         "usage": f"{PREFIX}flagle",
@@ -70,20 +108,20 @@ COMMANDS = {
         "instructions": "Categories: addition, subtraction, multiplication, division.",
     },
     "blackjack": {
-        "desc": "Play Blackjack against the bot, optionally wagering coins.",
+        "desc": "Play Blackjack against the bot, optionally wagering MiniCoins.",
         "aliases": ["bj"],
         "usage": f"{PREFIX}blackjack [bet]",
         "instructions": "Get as close to 21 as possible without going over. `hit` to draw or `stay` to hold. "
-        "Add a bet to wager coins: win pays double, a tie returns your bet.",
+        "Add a bet to wager MiniCoins: win pays double, a tie returns your bet.",
     },
     "coinflip": {
-        "desc": "Bet coins on a coin flip.",
+        "desc": "Bet MiniCoins on a coin flip.",
         "aliases": ["cf"],
-        "usage": f"{PREFIX}coinflip <bet> [heads|tails]",
+        "usage": f"{PREFIX}coinflip <bet> <heads|tails>",
         "instructions": "Guess the side. A correct call pays double your bet.",
     },
     "slots": {
-        "desc": "Bet coins on the slot machine.",
+        "desc": "Bet MiniCoins on the slot machine.",
         "aliases": ["slot"],
         "usage": f"{PREFIX}slots <bet>",
         "instructions": "Three of a kind pays big, two of a kind returns your bet, anything else loses it.",
@@ -133,17 +171,17 @@ COMMANDS = {
         "instructions": "Don't guess the same number as the bot!",
     },
     "daily": {
-        "desc": "Claim your daily coins and build a streak.",
+        "desc": "Claim your daily MiniCoins and build a streak.",
         "usage": f"{PREFIX}daily",
         "instructions": "Claim once a day. Consecutive days grow your streak and your reward.",
     },
     "balance": {
-        "desc": "Check your coin balance.",
+        "desc": "Check your MiniCoins balance.",
         "aliases": ["bal", "coins"],
         "usage": f"{PREFIX}balance",
     },
     "shop": {
-        "desc": "Browse cosmetic titles you can buy with coins.",
+        "desc": "Browse cosmetic titles you can buy with MiniCoins.",
         "usage": f"{PREFIX}shop",
         "instructions": "Buy a title with `;buy <id>`. Your equipped title shows on your profile.",
     },
@@ -153,9 +191,19 @@ COMMANDS = {
         "instructions": "See available titles and their ids with `;shop`.",
     },
     "richest": {
-        "desc": "See the players with the most coins.",
+        "desc": "See the players with the most MiniCoins.",
         "aliases": ["rich", "baltop"],
         "usage": f"{PREFIX}richest",
+    },
+    "achievements": {
+        "desc": "View your earned achievements.",
+        "aliases": ["achs"],
+        "usage": f"{PREFIX}achievements [member]",
+    },
+    "vote": {
+        "desc": "Vote for the bot on Top.gg and claim bonus MiniCoins.",
+        "usage": f"{PREFIX}vote",
+        "instructions": "Vote every 12 hours for a MiniCoins reward.",
     },
     "profile": {
         "desc": "View your profile.",
@@ -165,8 +213,9 @@ COMMANDS = {
     "leaderboard": {
         "desc": "View the leaderboard for a game.",
         "aliases": ["lb"],
-        "usage": f"{PREFIX}leaderboard <game>",
-        "instructions": "Supported: dino, flagle, fight, connect4, rockpaperscissors, tictactoe.",
+        "usage": f"{PREFIX}leaderboard <game> [server]",
+        "instructions": "Shows the global board by default. Add `server` (e.g. `;lb dino server`) "
+        "for this server's board only.",
     },
     "define": {"desc": "Define a word.", "aliases": ["def"], "usage": f"{PREFIX}define <word>"},
     "urbandictionary": {

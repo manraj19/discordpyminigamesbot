@@ -4,6 +4,8 @@ import random
 
 import discord
 
+from bot.core import emojis
+
 # Clean, directly-embeddable giphy URLs (the share-link "i.giphy.com/media/v1..."
 # form carries a tracking blob and often fails to render in an embed).
 ACTION_GIFS = {
@@ -118,7 +120,7 @@ class FightView(discord.ui.View):
 
     async def end_game(self, interaction, winner):
         coins = await self.on_win(winner) if self.on_win else 0
-        description = f"{winner.mention} wins!" + (f"  ·  🪙 +{coins} coins" if coins else "")
+        description = f"{winner.mention} wins!" + (f"  ·  {emojis.COIN} +{coins} MiniCoins" if coins else "")
         embed = discord.Embed(title="Game Over", description=description)
         embed.add_field(name=f"{self.user1.name}'s HP", value=self.hp[self.user1], inline=True)
         embed.add_field(name=f"{self.user2.name}'s HP", value=self.hp[self.user2], inline=True)

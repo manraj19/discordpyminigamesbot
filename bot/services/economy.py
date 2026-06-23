@@ -12,6 +12,8 @@ import sqlite3
 BASE_DAILY = 100  # coins for a fresh claim
 STREAK_BONUS = 25  # extra coins per consecutive day
 STREAK_CAP_DAYS = 6  # bonus stops growing after a week (day 8+ = BASE + 6*BONUS)
+VOTE_REWARD = 250  # coins for a Top.gg vote
+VOTE_COOLDOWN_HOURS = 12  # Top.gg votes refresh every 12 hours
 
 # Game payouts (the "earn by playing" faucet). Win-based games record score 1 and
 # pay WIN_COINS; score-based games pay per point so a bigger score earns more.
@@ -71,10 +73,19 @@ class EconomyService:
                 PRIMARY KEY (user_id, item_id)
             )"""
         )
-        # Upgrade older economy tables that predate the cosmetics title column.
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS achievements (
+                user_id INTEGER,
+                achievement_id TEXT,
+                PRIMARY KEY (user_id, achievement_id)
+            )"""
+        )
+        # Upgrade older economy tables that predate later columns.
         cols = [r[1] for r in self._conn.execute("PRAGMA table_info(economy)")]
         if "title" not in cols:
             self._conn.execute("ALTER TABLE economy ADD COLUMN title TEXT")
+        if "last_vote" not in cols:
+            self._conn.execute("ALTER TABLE economy ADD COLUMN last_vote TEXT")
         self._conn.commit()
 
     def balance(self, user_id):
@@ -167,6 +178,43 @@ class EconomyService:
         self._conn.commit()
         self.equip_title(user_id, item_id)
         return "bought"
+
+    # --- achievements ---
+    def has_achievement(self, user_id, achievement_id):
+        return (
+            self._conn.execute(
+                "SELECT 1 FROM achievements WHERE user_id = ? AND achievement_id = ?", (user_id, achievement_id)
+            ).fetchone()
+            is not None
+        )
+
+    def grant_achievement(self, user_id, achievement_id):
+        self._conn.execute(
+            "INSERT OR IGNORE INTO achievements (user_id, achievement_id) VALUES (?, ?)", (user_id, achievement_id)
+        )
+        self._conn.commit()
+
+    def earned_achievements(self, user_id):
+        return [
+            r[0] for r in self._conn.execute("SELECT achievement_id FROM achievements WHERE user_id = ?", (user_id,))
+        ]
+
+    # --- Top.gg vote rewards ---
+    def claim_vote(self, user_id, username, now=None):
+        """Grant the vote reward if the user hasn't claimed within the cooldown.
+        Returns ``(claimed, reward, hours_until_next)``."""
+        now = now or datetime.datetime.now(datetime.timezone.utc)
+        row = self._conn.execute("SELECT last_vote FROM economy WHERE user_id = ?", (user_id,)).fetchone()
+        last = datetime.datetime.fromisoformat(row[0]) if row and row[0] else None
+        if last is not None:
+            elapsed = now - last
+            if elapsed < datetime.timedelta(hours=VOTE_COOLDOWN_HOURS):
+                hours_left = VOTE_COOLDOWN_HOURS - elapsed.total_seconds() / 3600
+                return False, 0, max(1, round(hours_left))
+        self.add_coins(user_id, username, VOTE_REWARD)
+        self._conn.execute("UPDATE economy SET last_vote = ? WHERE user_id = ?", (now.isoformat(), user_id))
+        self._conn.commit()
+        return True, VOTE_REWARD, 0
 
     def close(self):
         self._conn.close()

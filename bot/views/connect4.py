@@ -68,7 +68,7 @@ class Connect4View(discord.ui.View):
             embed = self.embed()
             footer = f"{self.current} wins! 🎉"
             if coins:
-                footer += f"  ·  🪙 +{coins} coins"
+                footer += f"  ·  🪙 +{coins} MiniCoins"
             embed.set_footer(text=footer)
             await interaction.response.edit_message(embed=embed, view=None)
             self.stop()

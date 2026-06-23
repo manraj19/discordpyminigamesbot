@@ -2,6 +2,7 @@
 
 import discord
 
+from bot.core import emojis
 from bot.games.blackjack import calculate_hand, create_deck
 from bot.games.gambling import settle_blackjack
 
@@ -90,13 +91,13 @@ class BlackjackView(discord.ui.View):
                 self.bot.economy.add_coins(self.player.id, str(self.player), credit)
             net = credit - self.bet
             coins_text = (
-                f"You won **+{net}** coins 🪙"
+                f"You won **+{net}** MiniCoins {emojis.COIN}"
                 if net > 0
-                else "Push — your bet was returned 🪙"
+                else f"Push, your bet was returned {emojis.COIN}"
                 if net == 0
-                else f"You lost **{self.bet}** coins 🪙"
+                else f"You lost **{self.bet}** MiniCoins {emojis.COIN}"
             )
-            embed.add_field(name="Coins", value=coins_text, inline=False)
+            embed.add_field(name="MiniCoins", value=coins_text, inline=False)
         self.settled = True
         self.clear_items()
         await interaction.response.edit_message(embed=embed, view=self)

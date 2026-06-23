@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core import emojis
 from bot.core.utils import invalid_opponent
 
 WORDS = [
@@ -84,9 +85,9 @@ class Race(commands.Cog):
                 await channel.send(f"✅ {winner.mention} got it!  **{scores[player1]}-{scores[player2]}**")
 
         if scores[player1] > scores[player2]:
-            result = f"🏆 {player1.mention} wins the race!"
+            result = f"{emojis.TROPHY} {player1.mention} wins the race!"
         elif scores[player2] > scores[player1]:
-            result = f"🏆 {player2.mention} wins the race!"
+            result = f"{emojis.TROPHY} {player2.mention} wins the race!"
         else:
             result = "It's a tie! 🤝"
 

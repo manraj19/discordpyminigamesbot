@@ -8,7 +8,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core import config, embeds
+from bot.core import config, embeds, emojis
+from bot.games.achievements import ACHIEVEMENTS
 from bot.services.economy import TITLES
 from bot.services.scores import SUPPORTED_GAMES
 
@@ -81,24 +82,28 @@ class Utility(commands.Cog):
         error, embed = await self._urban(term)
         await (interaction.followup.send(error) if error else interaction.followup.send(embed=embed))
 
-    # --- leaderboard ---
-    def _leaderboard(self, game):
+    # --- leaderboard (global by default, opt-in per server) ---
+    def _leaderboard(self, game, guild_id):
         game = game.lower()
         if game not in SUPPORTED_GAMES:
             return "Supported leaderboards: " + ", ".join(SUPPORTED_GAMES) + ".", None
-        rows = self.bot.scores.top(game, 10)
+        rows = self.bot.scores.top(game, guild_id, 10)
         if not rows:
-            return f"No scores available yet for {game}.", None
+            where = " on this server" if guild_id else ""
+            return f"No scores yet for {game}{where}.", None
         description = "\n".join(f"{i}. {username}: {score}" for i, (username, score) in enumerate(rows, 1))
-        return None, embeds.branded(title=f"{game.capitalize()} Leaderboard", description=description)
+        embed = embeds.branded(title=f"{game.capitalize()} Leaderboard", description=description)
+        embed.set_footer(text="This server" if guild_id else "Global, all servers")
+        return None, embed
 
     @commands.command(aliases=["lb"])
-    async def leaderboard(self, ctx, game: str):
-        error, embed = self._leaderboard(game)
+    async def leaderboard(self, ctx, game: str, scope: str = "global"):
+        guild_id = ctx.guild.id if scope.lower() == "server" and ctx.guild else None
+        error, embed = self._leaderboard(game, guild_id)
         await (ctx.send(error) if error else ctx.send(embed=embed))
 
-    @app_commands.command(name="leaderboard", description="View a game's leaderboard")
-    @app_commands.describe(game="Which game's leaderboard to view")
+    @app_commands.command(name="leaderboard", description="View a game's leaderboard (global, or this server)")
+    @app_commands.describe(game="Which game's leaderboard to view", scope="Global (default) or this server")
     async def leaderboard_slash(
         self,
         interaction: discord.Interaction,
@@ -114,16 +119,19 @@ class Utility(commands.Cog):
             "mathematics",
             "unscramble",
         ],
+        scope: Literal["global", "server"] = "global",
     ):
-        error, embed = self._leaderboard(game)
+        guild_id = interaction.guild.id if scope == "server" and interaction.guild else None
+        error, embed = self._leaderboard(game, guild_id)
         await (interaction.response.send_message(error) if error else interaction.response.send_message(embed=embed))
 
-    # --- profile ---
+    # --- profile (overall, across all servers) ---
     def _profile(self, user):
+        self.bot.award_achievements(user.id, str(user))  # keep achievements current
         embed = embeds.branded(title=f"{user}'s Game Profile")
         title_id = self.bot.economy.equipped_title(user.id)
         if title_id:
-            embed.description = f"*{TITLES[title_id][0]}*"
+            embed.description = f"## 🏅 {TITLES[title_id][0]}"
         embed.set_thumbnail(url=user.display_avatar.url)
         for game in SUPPORTED_GAMES:
             score = self.bot.scores.user_score(user.id, game)
@@ -133,7 +141,10 @@ class Utility(commands.Cog):
                 value = f"Score: {score}\nRank: {self.bot.scores.rank(game, score)}"
             embed.add_field(name=game.capitalize(), value=value, inline=True)
         coins, streak = self.bot.economy.balance(user.id)
-        embed.add_field(name="🪙 Coins", value=f"{coins}\n🔥 {streak}-day streak", inline=True)
+        embed.add_field(name="🪙 MiniCoins", value=f"{coins}\n{emojis.STREAK} {streak}-day streak", inline=True)
+        earned = len(self.bot.economy.earned_achievements(user.id))
+        embed.add_field(name="🏅 Achievements", value=f"{earned}/{len(ACHIEVEMENTS)}", inline=True)
+        embed.set_footer(text="Overall stats across all servers")
         return embed
 
     @commands.command()

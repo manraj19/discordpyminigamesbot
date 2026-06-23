@@ -8,6 +8,8 @@ running score so the cog can replay an innings live, ball by ball."""
 
 import random
 
+from bot.core import emojis
+
 OUTCOMES = ["dot", "single", "double", "triple", "four", "six", "wicket"]
 BASE_WEIGHTS = {
     "dot": 0.30,
@@ -105,14 +107,22 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
                 dismissal = random.choice(["bowled", "caught", "run out"])
                 if dismissal == "run out":
                     fielder = random.choice(bowling_team)
-                    emit(f"🔴 WICKET! {batsman} run out by {fielder} for {player_scores[batsman]}.", "wicket")
+                    emit(
+                        f"{emojis.WICKET} WICKET! {batsman} run out by {fielder} for {player_scores[batsman]}.",
+                        "wicket",
+                    )
                 else:
                     player_wickets[bowler] += 1
                     if dismissal == "bowled":
-                        emit(f"🔴 WICKET! {bowler} bowls {batsman} for {player_scores[batsman]}!", "wicket")
+                        emit(
+                            f"{emojis.WICKET} WICKET! {bowler} bowls {batsman} for {player_scores[batsman]}!", "wicket"
+                        )
                     else:
                         fielder = random.choice(bowling_team)
-                        emit(f"🔴 WICKET! {batsman} c {fielder} b {bowler} for {player_scores[batsman]}.", "wicket")
+                        emit(
+                            f"{emojis.WICKET} WICKET! {batsman} c {fielder} b {bowler} for {player_scores[batsman]}.",
+                            "wicket",
+                        )
                 wickets += 1
                 # ponytail: the striker is always the one dismissed (incl. run-outs);
                 # modelling who's at the danger end isn't worth it for a sim.

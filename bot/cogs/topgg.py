@@ -14,6 +14,7 @@ class TopGG(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.topggpy = topgg.DBLClient(bot, config.TOPGG_TOKEN)
+        bot.topgg_client = self.topggpy  # let other cogs check votes (e.g. ;vote rewards)
         self.update_stats.start()
 
     @tasks.loop(minutes=60)

@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core import emojis
 from bot.data import WORDS
 from bot.games.wordguess import GREEN, is_valid_guess, score_guess
 
@@ -31,6 +32,15 @@ class WordGuess(commands.Cog):
         return status != 404
 
     async def _play(self, channel, player):
+        if not self.bot.begin_session(player.id):
+            await channel.send("⚠️ Finish your current game first.")
+            return
+        try:
+            await self._run(channel, player)
+        finally:
+            self.bot.end_session(player.id)
+
+    async def _run(self, channel, player):
         answer = random.choice(WORDS)
         intro = discord.Embed(
             title="🔤 Word Guess",
@@ -76,7 +86,7 @@ class WordGuess(commands.Cog):
                 )
                 await channel.send(embed=embed)
                 coins = self.bot.reward(player, 1, GAME)
-                await channel.send(f"🪙 **+{coins}** coins")
+                await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
                 return
 
             tries_left = MAX_TRIES - attempts

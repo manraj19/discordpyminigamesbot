@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.core import emojis
 from bot.core.utils import run_countdown
 from bot.data import COUNTRIES
 
@@ -18,6 +19,15 @@ class Flagle(commands.Cog):
         self.bot = bot
 
     async def _play(self, message, author, channel, send_text):
+        if not self.bot.begin_session(author.id):
+            await channel.send("⚠️ Finish your current game first.")
+            return
+        try:
+            await self._run(message, author, channel, send_text)
+        finally:
+            self.bot.end_session(author.id)
+
+    async def _run(self, message, author, channel, send_text):
         score = 0
         response_time = 10.0
         embed = discord.Embed(title="Flagle Game", color=discord.Color.blue())
@@ -57,7 +67,7 @@ class Flagle(commands.Cog):
             await message.edit(content="", embed=embed)
 
         coins = self.bot.reward(author, score, GAME)
-        await channel.send(f"🪙 **+{coins}** coins")
+        await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
 
     @commands.command()
     @commands.cooldown(1, 10, commands.BucketType.user)

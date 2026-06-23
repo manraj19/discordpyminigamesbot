@@ -7,7 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import config
-from bot.core.checks import BlockedUser
+from bot.core.checks import BlockedUser, ChannelDisabled
 
 log = logging.getLogger(__name__)
 
@@ -15,8 +15,8 @@ log = logging.getLogger(__name__)
 def setup_error_handlers(bot):
     @bot.event
     async def on_command_error(ctx, error):
-        if isinstance(error, BlockedUser):
-            return  # silently ignore blocklisted users
+        if isinstance(error, (BlockedUser, ChannelDisabled)):
+            return  # silently ignore blocked users and disabled channels
         if isinstance(error, commands.CommandNotFound):
             await ctx.send(
                 f"That command does not exist. Use `{config.COMMAND_PREFIX}help` to see the list of commands."

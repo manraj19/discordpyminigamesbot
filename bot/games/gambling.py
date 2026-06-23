@@ -6,9 +6,10 @@ slots drain coins rather than mint them."""
 
 import random
 
-SLOT_SYMBOLS = ["🍒", "🍋", "🔔", "💎", "7️⃣"]
+# Symbol names (the cog maps these to branded emojis for display).
+SLOT_SYMBOLS = ["cherry", "lemon", "bell", "diamond", "seven"]
 # Three of a kind pays this multiple of the bet, per symbol (rarer = bigger).
-TRIPLE_MULT = {"🍒": 3, "🍋": 5, "🔔": 8, "💎": 12, "7️⃣": 24}
+TRIPLE_MULT = {"cherry": 3, "lemon": 5, "bell": 8, "diamond": 12, "seven": 24}
 
 
 def spin_slots():

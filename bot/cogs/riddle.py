@@ -18,6 +18,15 @@ class Riddle(commands.Cog):
         self.bot = bot
 
     async def _play(self, channel, player):
+        if not self.bot.begin_session(player.id):
+            await channel.send("⚠️ Finish your current game first.")
+            return
+        try:
+            await self._run(channel, player)
+        finally:
+            self.bot.end_session(player.id)
+
+    async def _run(self, channel, player):
         riddle = random.choice(RIDDLES)
         question, answer = riddle["question"], riddle["answer"]
 
