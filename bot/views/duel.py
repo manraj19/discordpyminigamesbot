@@ -4,7 +4,7 @@ embed. All combat rules live in bot.games.duel; this only renders and routes."""
 import discord
 
 from bot.core import emojis
-from bot.games.duel import ABILITIES, LOADOUT_SIZE, ai_choose, step
+from bot.games.duel import ABILITIES, DRAW, LOADOUT_SIZE, ai_choose, step
 
 _STYLE = {
     "strike": discord.ButtonStyle.danger,
@@ -78,7 +78,7 @@ class AbilityButton(discord.ui.Button):
 
 class DuelView(discord.ui.View):
     def __init__(self, players, state, *, on_end, ai_index=None):
-        super().__init__(timeout=180.0)
+        super().__init__(timeout=300.0)  # the turn cap bounds game length; this only catches AFK
         self.players = players  # [user0, user1]; one may be an AI placeholder
         self.state = state
         self.on_end = on_end
@@ -105,7 +105,9 @@ class DuelView(discord.ui.View):
         embed = discord.Embed(title="⚔️ Duel", color=discord.Color.dark_red())
         embed.add_field(name=self.players[0].display_name, value=_status_line(f0), inline=True)
         embed.add_field(name=self.players[1].display_name, value=_status_line(f1), inline=True)
-        if winner is not None:
+        if winner is DRAW:
+            embed.description = f"{emojis.STUN} The duel hit the turn limit and ended in a draw."
+        elif winner is not None:
             widx = 0 if winner is f0 else 1
             embed.description = f"{emojis.TROPHY} **{self.players[widx].display_name}** wins the duel!"
         else:
@@ -140,7 +142,10 @@ class DuelView(discord.ui.View):
             self.disable_all()
             await interaction.response.edit_message(embed=self.embed(winner), view=self)
             self.stop()
-            await self.on_end(0 if winner is state.fighters[0] else 1)
+            if winner is DRAW:
+                await self.on_end("draw")
+            else:
+                await self.on_end(0 if winner is state.fighters[0] else 1)
             return
 
         self.render_turn()

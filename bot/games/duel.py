@@ -19,6 +19,11 @@ WEAKEN_AMOUNT = 6
 EMPOWER_AMOUNT = 6
 EXECUTE_THRESHOLD = 30  # Finisher gets its bonus against a target at or below this HP
 EXECUTE_BONUS = 30
+MAX_TURNS = 40  # anti-stall: past this many half-turns the duel is called on HP ratio
+
+# Sentinel returned by step() as the "winner" when a duel is called as a tie at the
+# turn cap. The cog treats it as a refunded, no-XP draw.
+DRAW = object()
 
 # --- progression / stat constants ---
 BASE_HP = 100
@@ -200,6 +205,18 @@ def _handover(state, log):
         return None
 
 
+def _cap_result(state):
+    """Decide a duel that reached the turn cap by remaining HP ratio. Returns the
+    Combatant with the higher ratio, or DRAW when they are level."""
+    f0, f1 = state.fighters
+    r0, r1 = f0.hp / f0.max_hp, f1.hp / f1.max_hp
+    if r0 > r1:
+        return f0
+    if r1 > r0:
+        return f1
+    return DRAW
+
+
 def step(state, ability_id):
     """Resolve the active fighter using `ability_id`. Returns (state, log, winner)
     where winner is the winning Combatant or None. Raises ValueError on an illegal
@@ -253,6 +270,12 @@ def step(state, ability_id):
     if target.hp <= 0:
         return state, log, actor
     winner = _handover(state, log)
+    if winner is None and state.turn > MAX_TURNS:
+        winner = _cap_result(state)
+        if winner is DRAW:
+            log.append(f"{emojis.STUN} Turn limit reached. The duel is a draw.")
+        else:
+            log.append(f"{emojis.STUN} Turn limit reached. {winner.name} wins on remaining HP.")
     return state, log, winner
 
 

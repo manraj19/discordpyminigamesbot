@@ -50,11 +50,15 @@ class Duel(commands.Cog):
         return make_combatant(name or member.display_name, stats, rec["loadout"]), rec
 
     async def _settle(self, channel, players, records, mode, bet, widx):
-        if widx is None:  # timeout / no result
+        if widx is None or widx == "draw":  # no decisive result: AFK timeout or turn-cap draw
             if mode == "casual" and bet:
                 for player in players:
                     self.bot.economy.add_coins(player.id, str(player), bet)
-                await channel.send(f"⌛ Duel expired. The {bet}-MiniCoin wagers were refunded.")
+            refund = f" The {bet}-MiniCoin wagers were refunded." if (mode == "casual" and bet) else ""
+            if widx == "draw":
+                await channel.send(f"🤝 The duel hit the turn limit and ended in a draw.{refund}")
+            elif refund:
+                await channel.send(f"⌛ Duel expired.{refund}")
             return
         winner, loser = players[widx], players[1 - widx]
         if mode == "ranked":
@@ -152,6 +156,8 @@ class Duel(commands.Cog):
                 if ach:
                     msg += f"\n{ach}"
                 await channel.send(msg)
+            elif widx == "draw":
+                await channel.send(f"🤝 {member.mention} drew with the Arena Bot. Gear up and try again.")
             else:
                 self.bot.duel.apply_match(member.id, str(member), False, ARENA_LOSS_XP)
                 await channel.send(f"💀 The Arena Bot beat {member.mention}. Gear up and try again.")

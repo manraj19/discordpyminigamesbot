@@ -3,6 +3,8 @@
 import pytest
 
 from bot.games.duel import (
+    DRAW,
+    MAX_TURNS,
     aggregate_stats,
     ai_choose,
     available_moves,
@@ -105,6 +107,24 @@ def test_aggregate_stats_adds_gear_and_levels():
 def test_level_for_xp():
     assert level_for_xp(0) == 1
     assert level_for_xp(250) == 3
+
+
+def test_turn_cap_calls_a_stall_as_a_draw():
+    s = _duel()  # both at full HP; Focus deals no damage, so nobody dies
+    winner = None
+    while winner is None:
+        _, _, winner = step(s, "focus")
+    assert winner is DRAW
+    assert s.turn > MAX_TURNS
+
+
+def test_turn_cap_decided_on_hp_ratio():
+    s = _duel()
+    s.fighters[1].hp -= 20  # B is wounded, so the cap favors A on HP ratio
+    winner = None
+    while winner is None:
+        _, _, winner = step(s, "focus")
+    assert winner is s.fighters[0]
 
 
 def test_elo_update_and_gap_gate():
