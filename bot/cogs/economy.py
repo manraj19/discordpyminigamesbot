@@ -127,7 +127,7 @@ class Economy(commands.Cog):
         earned = set(self.bot.economy.earned_achievements(member.id))
         lines = [
             f"{'✅' if aid in earned else '🔒'} **{name}**: {desc}"
-            for aid, (name, desc, _check) in ACHIEVEMENTS.items()
+            for aid, (name, desc, _reward, _check) in ACHIEVEMENTS.items()
         ]
         return discord.Embed(
             title=f"🏅 Achievements ({len(earned)}/{len(ACHIEVEMENTS)})",

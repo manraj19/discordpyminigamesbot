@@ -7,7 +7,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core import emojis
 from bot.core.utils import run_countdown
 from bot.data import WORDS
 
@@ -60,8 +59,8 @@ class Unscramble(commands.Cog):
 
         if guess.content.strip().lower() == answer:
             await channel.send(f"✅ Correct! It was **{answer.upper()}**.")
-            coins = self.bot.reward(player, 1, GAME)
-            await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
+            result = self.bot.reward(player, 1, GAME)
+            await channel.send(result.line())
         else:
             await channel.send(f"❌ Nope, it was **{answer.upper()}**.")
 

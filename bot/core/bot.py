@@ -11,6 +11,8 @@ from bot.clients.http import HttpClient
 from bot.core import config
 from bot.core.checks import BlocklistCommandTree, global_blocklist_check
 from bot.core.errors import setup_error_handlers
+from bot.core.rewards import RewardResult
+from bot.games.achievements import ACHIEVEMENTS
 from bot.games.achievements import evaluate as evaluate_achievements
 from bot.services.blocklist import BlocklistService
 from bot.services.channel_lock import ChannelLockService
@@ -92,18 +94,20 @@ class MiniGamesBot(commands.AutoShardedBot):
     def reward(self, user, score, game):
         """Record a game result and pay out coins for it (the economy faucet).
         One choke point so every game earns coins with a single, tunable formula.
-        Scores are per server, derived from the player's Member (0 in DMs)."""
+        Scores are per server, derived from the player's Member (0 in DMs).
+        Returns a RewardResult so callers can show one uniform reward line."""
         guild_id = user.guild.id if getattr(user, "guild", None) else 0
         self.scores.record_result(user.id, str(user), score, game, guild_id)
         coins = payout(game, score)
         if coins:
             self.economy.add_coins(user.id, str(user), coins)
-        self.award_achievements(user.id, str(user))
-        return coins
+        new_achievements = self.award_achievements(user.id, str(user))
+        return RewardResult(coins=coins, new_achievements=new_achievements)
 
     def award_achievements(self, user_id, username):
-        """Grant any newly earned achievements. Returns the list of new ids.
-        Idempotent, so it's safe to call on play and whenever a profile is viewed."""
+        """Grant, pay out, and return any newly earned achievements as
+        ``[(name, reward), ...]``. Idempotent, so it's safe to call on play and
+        whenever a profile is viewed."""
         duelist = self.duel.get(user_id)
         coins, streak = self.economy.balance(user_id)
         stats = {
@@ -117,7 +121,10 @@ class MiniGamesBot(commands.AutoShardedBot):
         for aid in evaluate_achievements(stats):
             if not self.economy.has_achievement(user_id, aid):
                 self.economy.grant_achievement(user_id, aid)
-                newly.append(aid)
+                name, _desc, reward, _cond = ACHIEVEMENTS[aid]
+                if reward:
+                    self.economy.add_coins(user_id, username, reward)
+                newly.append((name, reward))
         return newly
 
     async def on_ready(self):

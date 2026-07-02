@@ -13,6 +13,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import emojis
+from bot.core.rewards import RewardResult
 from bot.core.utils import invalid_opponent
 from bot.games.duel import (
     ABILITIES,
@@ -63,11 +64,15 @@ class Duel(commands.Cog):
                 winner.id, str(winner), True, RANKED_WIN_XP, new_rating=new_w, trophies=RANKED_TROPHIES
             )
             self.bot.duel.apply_match(loser.id, str(loser), False, RANKED_LOSS_XP, new_rating=new_l)
-            self.bot.award_achievements(winner.id, str(winner))
-            await channel.send(
+            new = self.bot.award_achievements(winner.id, str(winner))
+            msg = (
                 f"{emojis.TROPHY} {winner.mention} wins ranked! Rating **{wr}→{new_w}** "
                 f"(+{RANKED_TROPHIES} {emojis.TROPHY}) · {loser.mention} **{lr}→{new_l}**"
             )
+            ach = RewardResult(new_achievements=new).line()
+            if ach:
+                msg += f"\n{ach}"
+            await channel.send(msg)
             return
         if bet:
             self.bot.economy.add_coins(winner.id, str(winner), bet * 2)
@@ -77,8 +82,12 @@ class Duel(commands.Cog):
             note = f"earns **{CASUAL_WIN_COINS}** MiniCoins {emojis.COIN}"
         self.bot.duel.apply_match(winner.id, str(winner), True, CASUAL_WIN_XP)
         self.bot.duel.apply_match(loser.id, str(loser), False, CASUAL_LOSS_XP)
-        self.bot.award_achievements(winner.id, str(winner))
-        await channel.send(f"{emojis.TROPHY} {winner.mention} {note}")
+        new = self.bot.award_achievements(winner.id, str(winner))
+        msg = f"{emojis.TROPHY} {winner.mention} {note}"
+        ach = RewardResult(new_achievements=new).line()
+        if ach:
+            msg += f"\n{ach}"
+        await channel.send(msg)
 
     async def _begin(self, channel, p0, p1, mode, bet):
         c0, r0 = self._fighter(p0)
@@ -137,10 +146,12 @@ class Duel(commands.Cog):
             if widx == 0:
                 self.bot.economy.add_coins(member.id, str(member), ARENA_WIN_COINS)
                 self.bot.duel.apply_match(member.id, str(member), True, ARENA_WIN_XP)
-                self.bot.award_achievements(member.id, str(member))
-                await channel.send(
-                    f"{emojis.TROPHY} {member.mention} cleared the arena! +{ARENA_WIN_COINS} MiniCoins {emojis.COIN}"
-                )
+                new = self.bot.award_achievements(member.id, str(member))
+                msg = f"{emojis.TROPHY} {member.mention} cleared the arena! +{ARENA_WIN_COINS} MiniCoins {emojis.COIN}"
+                ach = RewardResult(new_achievements=new).line()
+                if ach:
+                    msg += f"\n{ach}"
+                await channel.send(msg)
             else:
                 self.bot.duel.apply_match(member.id, str(member), False, ARENA_LOSS_XP)
                 await channel.send(f"💀 The Arena Bot beat {member.mention}. Gear up and try again.")

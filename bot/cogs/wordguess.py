@@ -7,7 +7,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core import emojis
 from bot.data import WORDS
 from bot.games.wordguess import GREEN, is_valid_guess, score_guess
 
@@ -85,8 +84,8 @@ class WordGuess(commands.Cog):
                     color=discord.Color.green(),
                 )
                 await channel.send(embed=embed)
-                coins = self.bot.reward(player, 1, GAME)
-                await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
+                result = self.bot.reward(player, 1, GAME)
+                await channel.send(result.line())
                 return
 
             tries_left = MAX_TRIES - attempts

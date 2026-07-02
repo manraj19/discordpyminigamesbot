@@ -7,7 +7,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core import emojis
 from bot.core.utils import run_countdown
 
 GAME = "dino"
@@ -60,8 +59,8 @@ class Dino(commands.Cog):
             score += 1
             response_time = 1.8 if score >= 30 else max(2.0, response_time - 0.5)
 
-        coins = self.bot.reward(player, score, GAME)
-        await channel.send(f"Game over! Your final score is {score}. {emojis.COIN} **+{coins}** MiniCoins")
+        result = self.bot.reward(player, score, GAME)
+        await channel.send(f"Game over! Your final score is {score}. {result.line()}".rstrip())
 
     @commands.command()
     @commands.cooldown(1, 10, commands.BucketType.user)

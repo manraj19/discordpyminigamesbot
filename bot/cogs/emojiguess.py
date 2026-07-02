@@ -7,7 +7,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core import emojis
 from bot.data import EMOJI_PUZZLES
 from bot.games.riddle import is_correct
 
@@ -61,8 +60,8 @@ class EmojiGuess(commands.Cog):
 
             if is_correct(message.content, answer):
                 await channel.send(f"✅ Correct, {player.mention}! It was **{answer}**.")
-                coins = self.bot.reward(player, 1, GAME)
-                await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
+                result = self.bot.reward(player, 1, GAME)
+                await channel.send(result.line())
                 return
 
             attempts += 1

@@ -8,7 +8,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core import emojis
 from bot.core.utils import run_countdown
 
 GAME = "mathematics"
@@ -84,8 +83,8 @@ class Mathematics(commands.Cog):
             response_time = max(5.0, response_time - 1.0)
             await channel.send("Correct!")
 
-        coins = self.bot.reward(player, score, GAME)
-        await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
+        result = self.bot.reward(player, score, GAME)
+        await channel.send(result.line() or "No MiniCoins this round.")
 
     @commands.command(aliases=["math", "maths"])
     @commands.cooldown(1, 10, commands.BucketType.user)

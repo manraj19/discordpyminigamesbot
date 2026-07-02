@@ -7,7 +7,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core import emojis
 from bot.core.utils import run_countdown
 from bot.data import COUNTRIES
 
@@ -66,8 +65,8 @@ class Flagle(commands.Cog):
             embed.add_field(name="Score", value=str(score), inline=True)
             await message.edit(content="", embed=embed)
 
-        coins = self.bot.reward(author, score, GAME)
-        await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
+        result = self.bot.reward(author, score, GAME)
+        await channel.send(result.line() or "No MiniCoins this round.")
 
     @commands.command()
     @commands.cooldown(1, 10, commands.BucketType.user)

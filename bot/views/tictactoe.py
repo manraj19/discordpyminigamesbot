@@ -4,7 +4,6 @@ rules to ``bot.games.tictactoe.TicTacToeGame``. Scoring is injected via an
 
 import discord
 
-from bot.core import emojis
 from bot.games.tictactoe import TicTacToeGame
 
 
@@ -33,8 +32,9 @@ class TicTacToeButton(discord.ui.Button):
 
         if view.game.winner() is not None:
             view.disable_all()
-            coins = await view.on_win(interaction.user) if view.on_win is not None else 0
-            text = f"{interaction.user.mention} wins! 🎉" + (f"  ·  {emojis.COIN} +{coins} MiniCoins" if coins else "")
+            result = await view.on_win(interaction.user) if view.on_win is not None else None
+            note = f"  ·  {result.line()}" if result and result.line() else ""
+            text = f"{interaction.user.mention} wins! 🎉{note}"
             await view.message.edit(content=text, view=view)
             view.stop()
             return

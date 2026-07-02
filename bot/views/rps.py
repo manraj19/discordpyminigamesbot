@@ -3,7 +3,6 @@ revealed once both have chosen. Scoring is injected via ``on_winner``."""
 
 import discord
 
-from bot.core import emojis
 from bot.games.rps import winner
 
 
@@ -46,11 +45,13 @@ class RPSView(discord.ui.View):
         if result is None:
             outcome = "It's a tie!"
         elif result == "a":
-            coins = await self.on_winner(self.player) if self.on_winner else 0
-            outcome = f"{self.player.mention} wins!" + (f"  ·  {emojis.COIN} +{coins} MiniCoins" if coins else "")
+            reward_result = await self.on_winner(self.player) if self.on_winner else None
+            note = f"  ·  {reward_result.line()}" if reward_result and reward_result.line() else ""
+            outcome = f"{self.player.mention} wins!{note}"
         else:
-            coins = await self.on_winner(self.opponent) if self.on_winner else 0
-            outcome = f"{self.opponent.mention} wins!" + (f"  ·  {emojis.COIN} +{coins} MiniCoins" if coins else "")
+            reward_result = await self.on_winner(self.opponent) if self.on_winner else None
+            note = f"  ·  {reward_result.line()}" if reward_result and reward_result.line() else ""
+            outcome = f"{self.opponent.mention} wins!{note}"
 
         for item in self.children:
             item.disabled = True

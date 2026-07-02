@@ -7,8 +7,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core import emojis
-
 GAME = "guessnumber"
 LOW, HIGH = 1, 1000
 GUESS_TIMEOUT = 60.0
@@ -50,8 +48,8 @@ class GuessNumber(commands.Cog):
             if guess == secret:
                 tries = "guess" if attempts == 1 else "guesses"
                 await channel.send(f"🎉 Got it in **{attempts}** {tries}! The number was **{secret}**.")
-                coins = self.bot.reward(player, 1, GAME)
-                await channel.send(f"{emojis.COIN} **+{coins}** MiniCoins")
+                result = self.bot.reward(player, 1, GAME)
+                await channel.send(result.line())
                 return
             await channel.send("Go higher ⬆️" if guess < secret else "Go lower ⬇️")
 
