@@ -11,6 +11,7 @@ import sqlite3
 class BlocklistService:
     def __init__(self, db_path="scores.db"):
         self._conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL")  # concurrent readers with one writer, safer on crash
         self._conn.execute(
             """CREATE TABLE IF NOT EXISTS blocklist (
                 user_id INTEGER PRIMARY KEY,

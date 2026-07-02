@@ -10,6 +10,7 @@ from bot.services.channel_lock import ChannelLockService
 from bot.services.duel import DuelService
 from bot.services.economy import VOTE_COOLDOWN_HOURS, VOTE_REWARD, EconomyService
 from bot.services.scores import ScoreService
+from bot.services.usage import UsageService
 
 
 def _db():
@@ -95,6 +96,18 @@ def test_channel_lock():
     c.enable(123)
     assert not c.is_disabled(123)
     c.close()
+
+
+def test_usage_counts_and_totals():
+    u = UsageService(_db())
+    u.record("dino", day="2026-07-01")
+    u.record("dino", day="2026-07-01")
+    u.record("duel", day="2026-07-01")
+    top = dict(u.top(days=3650))  # wide window to cover the fixed dates
+    assert top["dino"] == 2 and top["duel"] == 1
+    assert u.top(days=3650)[0][0] == "dino"  # most-used first
+    assert u.total(days=3650) == 3
+    u.close()
 
 
 def test_duel_reset_season():

@@ -45,6 +45,7 @@ _SCHEMA = """CREATE TABLE {name} (
 class ScoreService:
     def __init__(self, db_path="scores.db"):
         self._conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL")  # concurrent readers with one writer, safer on crash
         self._conn.execute(_SCHEMA.format(name="IF NOT EXISTS scores"))
         cols = [r[1] for r in self._conn.execute("PRAGMA table_info(scores)")]
         if "guild_id" not in cols:

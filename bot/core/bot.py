@@ -19,11 +19,13 @@ from bot.services.channel_lock import ChannelLockService
 from bot.services.duel import DuelService
 from bot.services.economy import EconomyService, payout
 from bot.services.scores import ScoreService
+from bot.services.usage import UsageService
 
 log = logging.getLogger(__name__)
 
 EXTENSIONS = [
     "bot.cogs.admin",
+    "bot.cogs.maintenance",
     "bot.cogs.help",
     "bot.cogs.topgg",
     "bot.cogs.utility",
@@ -66,6 +68,7 @@ class MiniGamesBot(commands.AutoShardedBot):
         self.duel = DuelService()
         self.blocklist = BlocklistService()
         self.channel_lock = ChannelLockService()
+        self.usage = UsageService()
         self.http_client = HttpClient()
         self.topgg_client = None  # set by the Top.gg cog when a token is configured
         self.active_sessions = set()  # user ids currently in a chat-based game (one at a time)
@@ -138,4 +141,5 @@ class MiniGamesBot(commands.AutoShardedBot):
         self.duel.close()
         self.blocklist.close()
         self.channel_lock.close()
+        self.usage.close()
         await super().close()

@@ -11,6 +11,7 @@ import sqlite3
 class ChannelLockService:
     def __init__(self, db_path="scores.db"):
         self._conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL")  # concurrent readers with one writer, safer on crash
         self._conn.execute("CREATE TABLE IF NOT EXISTS disabled_channels (channel_id INTEGER PRIMARY KEY)")
         self._conn.commit()
         self._cache = {row[0] for row in self._conn.execute("SELECT channel_id FROM disabled_channels")}
