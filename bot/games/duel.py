@@ -241,7 +241,7 @@ def step(state, ability_id):
         log.append(f"{emojis.SHIELD} {actor.name} guards (+{ab.shield} shield).")
     if ab.heal:
         actor.hp = min(actor.max_hp, actor.hp + ab.heal)
-        log.append(f"💚 {actor.name} mends (+{ab.heal} HP).")
+        log.append(f"{emojis.HEALTH} {actor.name} mends (+{ab.heal} HP).")
     if ab.empower:
         actor.empower = max(actor.empower, ab.empower)
         log.append(f"🔺 {actor.name} sharpens their attack.")

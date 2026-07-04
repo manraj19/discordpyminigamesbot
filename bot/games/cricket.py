@@ -134,7 +134,7 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
                 runs += scored
                 player_scores[batsman] += scored
                 if outcome == "four":
-                    emit(f"🏏 FOUR! {batsman} finds the boundary.", "boundary")
+                    emit(f"{emojis.BATBALL} FOUR! {batsman} finds the boundary.", "boundary")
                 elif outcome == "six":
                     emit(f"💥 SIX! {batsman} goes big!", "boundary")
                 if 50 <= player_scores[batsman] < 100 and batsman not in fifty_highlighted:
