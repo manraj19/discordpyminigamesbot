@@ -11,6 +11,12 @@ from dataclasses import dataclass, field
 from bot.core import emojis
 
 
+def progress_bar(current, total, width=10):
+    """A text progress bar like ``▰▰▰▱▱▱▱▱▱▱`` for ``current`` out of ``total``."""
+    filled = 0 if total <= 0 else min(width, round(width * current / total))
+    return "▰" * filled + "▱" * (width - filled)
+
+
 @dataclass
 class RewardResult:
     coins: int = 0

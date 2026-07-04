@@ -8,7 +8,7 @@ import tempfile
 from bot.games.achievements import evaluate
 from bot.services.channel_lock import ChannelLockService
 from bot.services.duel import DuelService
-from bot.services.economy import VOTE_COOLDOWN_HOURS, VOTE_REWARD, EconomyService
+from bot.services.economy import FIRST_WIN_BONUS, VOTE_COOLDOWN_HOURS, VOTE_REWARD, EconomyService
 from bot.services.scores import ScoreService
 from bot.services.usage import UsageService
 
@@ -96,6 +96,33 @@ def test_channel_lock():
     c.enable(123)
     assert not c.is_disabled(123)
     c.close()
+
+
+def test_duel_add_xp_and_level_up():
+    d = DuelService(_db())
+    d.get_or_create(1, "A")
+    level, leveled = d.add_xp(1, "A", 50)  # xp 0 -> 50, still level 1
+    assert level == 1 and not leveled
+    level, leveled = d.add_xp(1, "A", 60)  # xp 50 -> 110, crosses to level 2
+    assert level == 2 and leveled
+    d.close()
+
+
+def test_apply_match_reports_level_up():
+    d = DuelService(_db())
+    d.add_xp(1, "A", 95)  # just short of level 2
+    level, leveled = d.apply_match(1, "A", True, 25)  # win pushes past 100 xp
+    assert level == 2 and leveled
+    assert d.get(1)["wins"] == 1
+    d.close()
+
+
+def test_first_win_of_day_is_once_per_day():
+    e = EconomyService(_db())
+    assert e.claim_first_win(1, "u", today="2026-07-02") == FIRST_WIN_BONUS
+    assert e.claim_first_win(1, "u", today="2026-07-02") == 0  # same UTC day, no repeat
+    assert e.claim_first_win(1, "u", today="2026-07-03") == FIRST_WIN_BONUS  # new day resets
+    e.close()
 
 
 def test_usage_counts_and_totals():

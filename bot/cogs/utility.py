@@ -9,7 +9,9 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import config, embeds, emojis
+from bot.core.rewards import progress_bar
 from bot.games.achievements import ACHIEVEMENTS
+from bot.games.duel import XP_PER_LEVEL
 from bot.services.economy import TITLES
 from bot.services.scores import SUPPORTED_GAMES
 
@@ -140,6 +142,13 @@ class Utility(commands.Cog):
             else:
                 value = f"Score: {score}\nRank: {self.bot.scores.rank(game, score)}"
             embed.add_field(name=game.capitalize(), value=value, inline=True)
+        rec = self.bot.duel.get_or_create(user.id, str(user))
+        into = rec["xp"] % XP_PER_LEVEL
+        embed.add_field(
+            name="⭐ Level",
+            value=f"**{rec['level']}**\n{progress_bar(into, XP_PER_LEVEL)} {into}/{XP_PER_LEVEL} XP",
+            inline=True,
+        )
         coins, streak = self.bot.economy.balance(user.id)
         embed.add_field(name="🪙 MiniCoins", value=f"{coins}\n{emojis.STREAK} {streak}-day streak", inline=True)
         earned = len(self.bot.economy.earned_achievements(user.id))

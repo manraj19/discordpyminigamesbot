@@ -81,6 +81,17 @@ class DuelService:
         self._conn.commit()
         return self.get(user_id)
 
+    def add_xp(self, user_id, username, amount):
+        """Add account XP outside a match (a game win or quest reward). Returns
+        ``(new_level, leveled_up)``."""
+        rec = self.get_or_create(user_id, username)
+        self._conn.execute(
+            "UPDATE duelists SET username = ?, xp = xp + ? WHERE user_id = ?", (username, amount, user_id)
+        )
+        self._conn.commit()
+        new_level = level_for_xp(rec["xp"] + amount)
+        return new_level, new_level > rec["level"]
+
     # --- gear ---
     def owns_gear(self, user_id, item_id):
         return (
@@ -142,8 +153,9 @@ class DuelService:
 
     # --- results ---
     def apply_match(self, user_id, username, won, xp_gain, new_rating=None, trophies=0):
-        """Record one player's match outcome (W/L, xp, optional new rating, trophies)."""
-        self.get_or_create(user_id, username)
+        """Record one player's match outcome (W/L, xp, optional new rating, trophies).
+        Returns ``(new_level, leveled_up)`` so the caller can announce a level-up."""
+        rec = self.get_or_create(user_id, username)
         sets = ["username = ?", "xp = xp + ?", "wins = wins + ?", "losses = losses + ?", "trophies = trophies + ?"]
         params = [username, xp_gain, 1 if won else 0, 0 if won else 1, trophies]
         if new_rating is not None:
@@ -152,6 +164,8 @@ class DuelService:
         params.append(user_id)
         self._conn.execute(f"UPDATE duelists SET {', '.join(sets)} WHERE user_id = ?", params)
         self._conn.commit()
+        new_level = level_for_xp(rec["xp"] + xp_gain)
+        return new_level, new_level > rec["level"]
 
     def top(self, limit=10):
         return self._conn.execute(

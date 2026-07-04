@@ -1,7 +1,14 @@
 """Tests for the unified reward pipeline and achievement rewards (Phase A)."""
 
-from bot.core.rewards import RewardResult
+from bot.core.rewards import RewardResult, progress_bar
 from bot.games.achievements import ACHIEVEMENTS, evaluate
+
+
+def test_progress_bar():
+    assert progress_bar(0, 100, width=10) == "▱" * 10
+    assert progress_bar(100, 100, width=10) == "▰" * 10
+    assert progress_bar(50, 100, width=10) == "▰▰▰▰▰▱▱▱▱▱"
+    assert progress_bar(5, 0, width=4) == "▱▱▱▱"  # zero total is safe, not a crash
 
 
 def test_reward_line_empty_when_nothing_earned():

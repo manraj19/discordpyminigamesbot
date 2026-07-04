@@ -14,6 +14,9 @@ STREAK_BONUS = 25  # extra coins per consecutive day
 STREAK_CAP_DAYS = 6  # bonus stops growing after a week (day 8+ = BASE + 6*BONUS)
 VOTE_REWARD = 250  # coins for a Top.gg vote
 VOTE_COOLDOWN_HOURS = 12  # Top.gg votes refresh every 12 hours
+GAME_WIN_XP = 5  # account XP for a game win (score-based games grant it once on a positive score)
+LEVEL_UP_COINS_PER = 25  # level-up bonus = new level * this
+FIRST_WIN_BONUS = 40  # bonus for a user's first game win each UTC day
 
 # Game payouts (the "earn by playing" faucet). Win-based games record score 1 and
 # pay WIN_COINS; score-based games pay per point so a bigger score earns more.
@@ -87,6 +90,8 @@ class EconomyService:
             self._conn.execute("ALTER TABLE economy ADD COLUMN title TEXT")
         if "last_vote" not in cols:
             self._conn.execute("ALTER TABLE economy ADD COLUMN last_vote TEXT")
+        if "last_first_win" not in cols:
+            self._conn.execute("ALTER TABLE economy ADD COLUMN last_first_win TEXT")
         self._conn.commit()
 
     def balance(self, user_id):
@@ -143,6 +148,18 @@ class EconomyService:
         )
         self._conn.commit()
         return True, reward, new_streak, coins
+
+    def claim_first_win(self, user_id, username, today=None):
+        """Grant the first-win-of-the-day bonus once per UTC day. Credits the coins
+        and returns the bonus amount (0 if already claimed today)."""
+        today = today or datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+        row = self._conn.execute("SELECT last_first_win FROM economy WHERE user_id = ?", (user_id,)).fetchone()
+        if row and row[0] == today:
+            return 0
+        self.add_coins(user_id, username, FIRST_WIN_BONUS)  # creates the row if needed
+        self._conn.execute("UPDATE economy SET last_first_win = ? WHERE user_id = ?", (today, user_id))
+        self._conn.commit()
+        return FIRST_WIN_BONUS
 
     # --- cosmetics (shop titles) ---
     def owns(self, user_id, item_id):

@@ -17,7 +17,7 @@ from bot.games.achievements import evaluate as evaluate_achievements
 from bot.services.blocklist import BlocklistService
 from bot.services.channel_lock import ChannelLockService
 from bot.services.duel import DuelService
-from bot.services.economy import EconomyService, payout
+from bot.services.economy import GAME_WIN_XP, LEVEL_UP_COINS_PER, EconomyService, payout
 from bot.services.scores import ScoreService
 from bot.services.usage import UsageService
 
@@ -101,11 +101,32 @@ class MiniGamesBot(commands.AutoShardedBot):
         Returns a RewardResult so callers can show one uniform reward line."""
         guild_id = user.guild.id if getattr(user, "guild", None) else 0
         self.scores.record_result(user.id, str(user), score, game, guild_id)
-        coins = payout(game, score)
-        if coins:
-            self.economy.add_coins(user.id, str(user), coins)
+        game_coins = payout(game, score)
+        first_win = self.economy.claim_first_win(user.id, str(user)) if score > 0 else 0
+        if game_coins:
+            self.economy.add_coins(user.id, str(user), game_coins)
+        xp = GAME_WIN_XP if score > 0 else 0
+        level_up, level_bonus = (None, 0)
+        if xp:
+            level_up, level_bonus = self.apply_level_up(user.id, str(user), self.duel.add_xp(user.id, str(user), xp))
         new_achievements = self.award_achievements(user.id, str(user))
-        return RewardResult(coins=coins, new_achievements=new_achievements)
+        return RewardResult(
+            coins=game_coins + level_bonus,
+            xp=xp,
+            level_up=level_up,
+            first_win_bonus=first_win,
+            new_achievements=new_achievements,
+        )
+
+    def apply_level_up(self, user_id, username, level_result):
+        """Credit the level-up bonus for a ``(new_level, leveled_up)`` result.
+        Returns ``(level_to_announce, bonus_coins)``; both falsy when no level-up."""
+        new_level, leveled = level_result
+        if not leveled:
+            return None, 0
+        bonus = new_level * LEVEL_UP_COINS_PER
+        self.economy.add_coins(user_id, username, bonus)
+        return new_level, bonus
 
     def award_achievements(self, user_id, username):
         """Grant, pay out, and return any newly earned achievements as
