@@ -18,6 +18,7 @@ from bot.services.blocklist import BlocklistService
 from bot.services.channel_lock import ChannelLockService
 from bot.services.duel import DuelService
 from bot.services.economy import GAME_WIN_XP, LEVEL_UP_COINS_PER, EconomyService, payout
+from bot.services.quests import QuestService
 from bot.services.scores import ScoreService
 from bot.services.usage import UsageService
 
@@ -69,6 +70,7 @@ class MiniGamesBot(commands.AutoShardedBot):
         self.blocklist = BlocklistService()
         self.channel_lock = ChannelLockService()
         self.usage = UsageService()
+        self.quests = QuestService()
         self.http_client = HttpClient()
         self.topgg_client = None  # set by the Top.gg cog when a token is configured
         self.active_sessions = set()  # user ids currently in a chat-based game (one at a time)
@@ -110,13 +112,48 @@ class MiniGamesBot(commands.AutoShardedBot):
         if xp:
             level_up, level_bonus = self.apply_level_up(user.id, str(user), self.duel.add_xp(user.id, str(user), xp))
         new_achievements = self.award_achievements(user.id, str(user))
+        quests, quest_level, quest_bonus = self._reward_quests(user, score, game_coins)
         return RewardResult(
-            coins=game_coins + level_bonus,
+            coins=game_coins + level_bonus + quest_bonus,
             xp=xp,
-            level_up=level_up,
+            level_up=quest_level or level_up,
             first_win_bonus=first_win,
             new_achievements=new_achievements,
+            quests=quests,
         )
+
+    def _reward_quests(self, user, score, game_coins):
+        """Fire the play/win/earn quest events for a game result and merge them.
+        Returns ``(completed, level_up, bonus_coins)`` for the reward line."""
+        events = [("game_play", 1)]
+        if score > 0:
+            events.append(("game_win", 1))
+        if game_coins:
+            events.append(("coins_earned", game_coins))
+        completed, level_up, bonus = [], None, 0
+        for kind, amount in events:
+            done, lvl, extra = self.quest_event(user.id, str(user), kind, amount)
+            completed.extend(done)
+            level_up = lvl or level_up
+            bonus += extra
+        return completed, level_up, bonus
+
+    def quest_event(self, user_id, username, kind, amount):
+        """Advance the user's quests for one event. Auto-claims any completions,
+        credits their coins and XP, and returns ``(completed, level_up, bonus)``
+        where ``completed`` is ``[(text, coins, xp), ...]`` for the reward line
+        and ``bonus`` is any level-up coin bonus the quest XP earned."""
+        completed = self.quests.progress(user_id, kind, amount)
+        if not completed:
+            return [], None, 0
+        total_coins = sum(coins for _text, coins, _xp in completed)
+        total_xp = sum(xp for _text, _coins, xp in completed)
+        if total_coins:
+            self.economy.add_coins(user_id, username, total_coins)
+        level_up, bonus = (None, 0)
+        if total_xp:
+            level_up, bonus = self.apply_level_up(user_id, username, self.duel.add_xp(user_id, username, total_xp))
+        return completed, level_up, bonus
 
     def apply_level_up(self, user_id, username, level_result):
         """Credit the level-up bonus for a ``(new_level, leveled_up)`` result.
@@ -163,4 +200,5 @@ class MiniGamesBot(commands.AutoShardedBot):
         self.blocklist.close()
         self.channel_lock.close()
         self.usage.close()
+        self.quests.close()
         await super().close()

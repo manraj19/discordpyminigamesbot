@@ -24,6 +24,7 @@ class RewardResult:
     new_achievements: list = field(default_factory=list)  # [(name, coin_reward), ...]
     level_up: int | None = None  # the new level number, if the action leveled the player up
     first_win_bonus: int = 0
+    quests: list = field(default_factory=list)  # completed quests: [(text, coins, xp), ...]
 
     def line(self) -> str:
         """One uniform reward line, e.g.
@@ -43,4 +44,7 @@ class RewardResult:
         for name, reward in self.new_achievements:
             bonus = f" **+{reward}**" if reward else ""
             parts.append(f"🏅 Achievement: **{name}**{bonus}")
+        for text, coins, xp in self.quests:
+            xp_bit = f" **+{xp}** XP" if xp else ""
+            parts.append(f"🎯 Quest: **{text}** **+{coins}**{xp_bit}")
         return " · ".join(parts)

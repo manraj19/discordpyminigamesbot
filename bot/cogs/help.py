@@ -29,7 +29,7 @@ CATEGORIES = {
     "Cricket": ["simulate", "playcricket"],
     "Gambling": ["blackjack", "coinflip", "slots"],
     "Duel": ["duel", "ranked", "arena", "duelist", "duelshop", "buygear", "buyability", "equip", "loadout", "duelrank"],
-    "Economy": ["daily", "balance", "shop", "buy", "richest", "achievements", "vote"],
+    "Economy & Quests": ["daily", "quests", "balance", "shop", "buy", "richest", "achievements", "vote"],
     "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo"],
 }
 
@@ -174,6 +174,13 @@ COMMANDS = {
         "desc": "Claim your daily MiniCoins and build a streak.",
         "usage": f"{PREFIX}daily",
         "instructions": "Claim once a day. Consecutive days grow your streak and your reward.",
+    },
+    "quests": {
+        "desc": "See your daily and weekly quests and their progress.",
+        "aliases": ["quest", "q"],
+        "usage": f"{PREFIX}quests",
+        "instructions": "Three dailies and two weeklies, drawn for you. They complete automatically as you "
+        "play, win, duel, earn, or wager. Finish all three dailies for a bonus.",
     },
     "balance": {
         "desc": "Check your MiniCoins balance.",

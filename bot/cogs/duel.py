@@ -71,11 +71,14 @@ class Duel(commands.Cog):
             level_up, bonus = self.bot.apply_level_up(winner.id, str(winner), win_level)
             self.bot.apply_level_up(loser.id, str(loser), loss_level)
             new = self.bot.award_achievements(winner.id, str(winner))
+            quests, q_level, q_bonus = self.bot.quest_event(winner.id, str(winner), "duel_win", 1)
             msg = (
                 f"{emojis.TROPHY} {winner.mention} wins ranked! Rating **{wr}→{new_w}** "
                 f"(+{RANKED_TROPHIES} {emojis.TROPHY}) · {loser.mention} **{lr}→{new_l}**"
             )
-            extra = RewardResult(coins=bonus, level_up=level_up, new_achievements=new).line()
+            extra = RewardResult(
+                coins=bonus + q_bonus, level_up=q_level or level_up, new_achievements=new, quests=quests
+            ).line()
             if extra:
                 msg += f"\n{extra}"
             await channel.send(msg)
@@ -91,8 +94,11 @@ class Duel(commands.Cog):
         level_up, bonus = self.bot.apply_level_up(winner.id, str(winner), win_level)
         self.bot.apply_level_up(loser.id, str(loser), loss_level)
         new = self.bot.award_achievements(winner.id, str(winner))
+        quests, q_level, q_bonus = self.bot.quest_event(winner.id, str(winner), "duel_win", 1)
         msg = f"{emojis.TROPHY} {winner.mention} {note}"
-        extra = RewardResult(coins=bonus, level_up=level_up, new_achievements=new).line()
+        extra = RewardResult(
+            coins=bonus + q_bonus, level_up=q_level or level_up, new_achievements=new, quests=quests
+        ).line()
         if extra:
             msg += f"\n{extra}"
         await channel.send(msg)
@@ -156,8 +162,11 @@ class Duel(commands.Cog):
                 win_level = self.bot.duel.apply_match(member.id, str(member), True, ARENA_WIN_XP)
                 level_up, bonus = self.bot.apply_level_up(member.id, str(member), win_level)
                 new = self.bot.award_achievements(member.id, str(member))
+                quests, q_level, q_bonus = self.bot.quest_event(member.id, str(member), "duel_win", 1)
                 msg = f"{emojis.TROPHY} {member.mention} cleared the arena! +{ARENA_WIN_COINS} MiniCoins {emojis.COIN}"
-                extra = RewardResult(coins=bonus, level_up=level_up, new_achievements=new).line()
+                extra = RewardResult(
+                    coins=bonus + q_bonus, level_up=q_level or level_up, new_achievements=new, quests=quests
+                ).line()
                 if extra:
                     msg += f"\n{extra}"
                 await channel.send(msg)

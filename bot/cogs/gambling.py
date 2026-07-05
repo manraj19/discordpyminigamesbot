@@ -9,6 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import emojis
+from bot.core.rewards import RewardResult
 from bot.games.gambling import slot_return, spin_slots
 
 REVEAL_DELAY = 0.8  # seconds between each slot reel locking in
@@ -17,6 +18,13 @@ REVEAL_DELAY = 0.8  # seconds between each slot reel locking in
 class Gambling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    def _wager_suffix(self, user, bet):
+        """Count the wager toward quests and return any completed-quest line to
+        append to the result message (empty string when nothing completed)."""
+        quests, level_up, bonus = self.bot.quest_event(user.id, str(user), "wager", bet)
+        line = RewardResult(coins=bonus, level_up=level_up, quests=quests).line()
+        return f"\n{line}" if line else ""
 
     # --- coinflip ---
     def _coinflip(self, user, bet, side):
@@ -31,11 +39,12 @@ class Gambling(commands.Cog):
             return "Your bet must be a positive number of MiniCoins."
         if not self.bot.economy.spend(user.id, bet):
             return "You don't have enough MiniCoins for that bet."
+        suffix = self._wager_suffix(user, bet)
         result = random.choice(["heads", "tails"])
         if result == side:
             self.bot.economy.add_coins(user.id, str(user), bet * 2)
-            return f"{emojis.COIN} It landed **{result}**. You won **+{bet}** MiniCoins!"
-        return f"{emojis.COIN} It landed **{result}**. You lost **{bet}** MiniCoins."
+            return f"{emojis.COIN} It landed **{result}**. You won **+{bet}** MiniCoins!{suffix}"
+        return f"{emojis.COIN} It landed **{result}**. You lost **{bet}** MiniCoins.{suffix}"
 
     @commands.command(aliases=["cf"])
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -72,6 +81,7 @@ class Gambling(commands.Cog):
         if error:
             await send(error)
             return
+        suffix = self._wager_suffix(user, bet)
         reels = spin_slots()
         shown = ["❓", "❓", "❓"]
         message = await send(f"🎰  {'   '.join(shown)}")
@@ -81,7 +91,7 @@ class Gambling(commands.Cog):
             await message.edit(content=f"🎰  {'   '.join(shown)}")
         await asyncio.sleep(0.4)
         result = self._slots_outcome(user, bet, reels)
-        await message.edit(content=f"🎰  {'   '.join(shown)}\n{result}")
+        await message.edit(content=f"🎰  {'   '.join(shown)}\n{result}{suffix}")
 
     @commands.command(aliases=["slot"])
     @commands.cooldown(1, 5, commands.BucketType.user)

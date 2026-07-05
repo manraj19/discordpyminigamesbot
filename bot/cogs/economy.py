@@ -1,6 +1,7 @@
 """Economy: a daily coin claim with a streak, a balance check, and a small
 cosmetic-title shop that coins are spent on."""
 
+import datetime
 import logging
 from typing import Literal
 
@@ -9,7 +10,9 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import config, emojis
+from bot.core.rewards import progress_bar
 from bot.games.achievements import ACHIEVEMENTS
+from bot.games.quests import DAILY_BONUS_COINS, DAILY_BONUS_XP, next_reset
 from bot.services.economy import TITLES
 
 log = logging.getLogger(__name__)
@@ -45,6 +48,47 @@ class Economy(commands.Cog):
     @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
     async def daily_slash(self, interaction: discord.Interaction):
         await interaction.response.send_message(embed=self._claim(interaction.user))
+
+    # --- quests ---
+    @staticmethod
+    def _reset_note(period, now):
+        left = next_reset(period, now) - now
+        hours = int(left.total_seconds() // 3600)
+        if period == "daily":
+            return f"resets in {hours}h {int(left.total_seconds() % 3600 // 60)}m"
+        return f"resets in {hours // 24}d {hours % 24}h"
+
+    def _quests_embed(self, user):
+        now = datetime.datetime.now(datetime.timezone.utc)
+        board = self.bot.quests.board(user.id, now)
+        embed = discord.Embed(
+            title="🎯 Your Quests",
+            description="Progress ticks up as you play. Rewards land on the spot, no claiming needed.",
+            color=discord.Color.gold(),
+        )
+        for period, label in (("daily", "Daily"), ("weekly", "Weekly")):
+            lines = []
+            for quest, prog, claimed in board[period]:
+                bar = progress_bar(prog, quest.target, width=8)
+                reward = f"{quest.coins} {emojis.COIN}" + (f" · {quest.xp} XP" if quest.xp else "")
+                tick = "✅ " if claimed else ""
+                lines.append(f"{tick}**{quest.text}**\n{bar} {min(prog, quest.target)}/{quest.target} · {reward}")
+            if period == "daily":
+                if board["daily_bonus"]:
+                    lines.append("✅ **All 3 dailies bonus** claimed")
+                else:
+                    lines.append(f"🎁 **All 3 dailies:** {DAILY_BONUS_COINS} {emojis.COIN} · {DAILY_BONUS_XP} XP")
+            embed.add_field(name=f"{label} · {self._reset_note(period, now)}", value="\n".join(lines), inline=False)
+        embed.set_footer(text="See your level and coins with ;profile")
+        return embed
+
+    @commands.command(aliases=["quest", "q"])
+    async def quests(self, ctx):
+        await ctx.send(embed=self._quests_embed(ctx.author))
+
+    @app_commands.command(name="quests", description="See your daily and weekly quests")
+    async def quests_slash(self, interaction: discord.Interaction):
+        await interaction.response.send_message(embed=self._quests_embed(interaction.user))
 
     # --- balance ---
     @commands.command(aliases=["bal", "coins"])
