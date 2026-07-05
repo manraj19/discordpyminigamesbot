@@ -13,11 +13,11 @@ from bot.core import config, emojis
 from bot.core.rewards import progress_bar
 from bot.games.achievements import ACHIEVEMENTS
 from bot.games.quests import DAILY_BONUS_COINS, DAILY_BONUS_XP, next_reset
-from bot.services.economy import TITLES
+from bot.services.economy import STREAKSHIELD_PRICE, TITLES, title_name
 
 log = logging.getLogger(__name__)
 
-TitleId = Literal["novice", "grinder", "sharpshooter", "highroller", "legend"]
+BuyId = Literal["novice", "grinder", "sharpshooter", "highroller", "legend", "streakshield"]
 
 
 class Economy(commands.Cog):
@@ -26,16 +26,26 @@ class Economy(commands.Cog):
 
     # --- daily ---
     def _claim(self, user):
-        claimed, reward, streak, coins = self.bot.economy.claim_daily(user.id, str(user))
+        claimed, reward, streak, coins, extras = self.bot.economy.claim_daily(user.id, str(user))
         if not claimed:
             return discord.Embed(
                 title="🪙 Daily already claimed",
                 description=f"Come back tomorrow! {emojis.STREAK} **{streak}**-day streak · balance **{coins}** MiniCoins.",
                 color=discord.Color.orange(),
             )
+        lines = [
+            f"{emojis.COIN} +**{reward}** MiniCoins · {emojis.STREAK} **{streak}**-day streak · balance **{coins}** MiniCoins."
+        ]
+        if extras.get("shield_saved"):
+            lines.insert(0, f"{emojis.SHIELD} Your streak shield saved your **{streak}**-day streak!")
+        if extras.get("milestone_coins"):
+            note = f"🎉 **{streak}-day milestone!** +**{extras['milestone_coins']}** MiniCoins"
+            if extras.get("milestone_title"):
+                note += f" · earned the title **{extras['milestone_title']}**"
+            lines.append(note)
         return discord.Embed(
             title="🪙 Daily reward claimed!",
-            description=f"{emojis.COIN} +**{reward}** MiniCoins · {emojis.STREAK} **{streak}**-day streak · balance **{coins}** MiniCoins.",
+            description="\n".join(lines),
             color=discord.Color.gold(),
         )
 
@@ -114,17 +124,30 @@ class Economy(commands.Cog):
             else:
                 tag = f"{price} {emojis.COIN}"
             lines.append(f"`{item_id}` **{name}** · {tag}")
+        shield_tag = (
+            "✅ owned" if self.bot.economy.owns(user.id, "streakshield") else f"{STREAKSHIELD_PRICE} {emojis.COIN}"
+        )
+        lines.append(f"\n{emojis.SHIELD} `streakshield` **Streak Shield** · {shield_tag}")
         return discord.Embed(
-            title="🛍️ Title Shop",
-            description="\n".join(lines) + "\n\nBuy with `;buy <id>`. Your title shows on your profile.",
+            title="🛍️ Shop",
+            description="\n".join(lines)
+            + "\n\nBuy with `;buy <id>`. Titles show on your profile. A streak shield saves your streak "
+            "the next time you miss a day (hold one at a time).",
             color=discord.Color.gold(),
         )
 
     def _buy(self, user, item):
+        if item == "streakshield":
+            result = self.bot.economy.buy_streakshield(user.id, str(user))
+            return {
+                "bought": f"{emojis.SHIELD} Bought a **Streak Shield**. It saves your streak the next time you miss a day.",
+                "have": "You already hold a streak shield. You can only keep one at a time.",
+                "poor": f"You need **{STREAKSHIELD_PRICE}** MiniCoins for a streak shield.",
+            }[result]
         result = self.bot.economy.buy_title(user.id, str(user), item)
         if result == "unknown":
             return "No such item. See `;shop`."
-        name = TITLES[item][0]
+        name = title_name(item)
         return {
             "bought": f"🛍️ Purchased and equipped **{name}**!",
             "equipped": f"✅ Equipped **{name}** (you already owned it).",
@@ -143,8 +166,8 @@ class Economy(commands.Cog):
     async def buy(self, ctx, item: str):
         await ctx.send(self._buy(ctx.author, item.lower()))
 
-    @app_commands.command(name="buy", description="Buy a cosmetic title")
-    async def buy_slash(self, interaction: discord.Interaction, item: TitleId):
+    @app_commands.command(name="buy", description="Buy a cosmetic title or a streak shield")
+    async def buy_slash(self, interaction: discord.Interaction, item: BuyId):
         await interaction.response.send_message(self._buy(interaction.user, item))
 
     # --- richest ---

@@ -12,7 +12,7 @@ from bot.core import config, embeds, emojis
 from bot.core.rewards import progress_bar
 from bot.games.achievements import ACHIEVEMENTS
 from bot.games.duel import XP_PER_LEVEL
-from bot.services.economy import TITLES
+from bot.services.economy import title_name
 from bot.services.scores import SUPPORTED_GAMES
 
 
@@ -133,7 +133,7 @@ class Utility(commands.Cog):
         embed = embeds.branded(title=f"{user}'s Game Profile")
         title_id = self.bot.economy.equipped_title(user.id)
         if title_id:
-            embed.description = f"## 🏅 {TITLES[title_id][0]}"
+            embed.description = f"## 🏅 {title_name(title_id)}"
         embed.set_thumbnail(url=user.display_avatar.url)
         for game in SUPPORTED_GAMES:
             score = self.bot.scores.user_score(user.id, game)

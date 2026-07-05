@@ -17,6 +17,15 @@ VOTE_COOLDOWN_HOURS = 12  # Top.gg votes refresh every 12 hours
 GAME_WIN_XP = 5  # account XP for a game win (score-based games grant it once on a positive score)
 LEVEL_UP_COINS_PER = 25  # level-up bonus = new level * this
 FIRST_WIN_BONUS = 40  # bonus for a user's first game win each UTC day
+STREAKSHIELD_PRICE = 750  # a one-shot item that saves a streak from a single missed day
+
+# Streak milestones: streak day -> (bonus coins, granted title id or None). The
+# titles here are earned this way, never bought, so they live in GRANTED_TITLES.
+STREAK_MILESTONES = {
+    7: (250, None),
+    30: (1000, "committed"),
+    100: (2500, "ironwilled"),
+}
 
 # Game payouts (the "earn by playing" faucet). Win-based games record score 1 and
 # pay WIN_COINS; score-based games pay per point so a bigger score earns more.
@@ -31,6 +40,26 @@ TITLES = {
     "highroller": ("High Roller", 2500),
     "legend": ("Legend", 5000),
 }
+
+# Titles you can only earn, never buy (streak milestones grant these). Kept apart
+# from the shop so they never appear as purchasable.
+GRANTED_TITLES = {
+    "committed": "The Committed",
+    "ironwilled": "Iron Willed",
+}
+
+
+def title_name(item_id):
+    """Display name for any title id, bought or granted (falls back to the id)."""
+    if item_id in TITLES:
+        return TITLES[item_id][0]
+    return GRANTED_TITLES.get(item_id, item_id)
+
+
+def streak_milestone(streak):
+    """Milestone reward for reaching this streak day: ``(bonus_coins, title_id)``,
+    or ``(0, None)`` on a non-milestone day. Pure so it can be tuned and tested."""
+    return STREAK_MILESTONES.get(streak, (0, None))
 
 
 def daily_outcome(last_date, today, current_streak):
@@ -123,12 +152,13 @@ class EconomyService:
             "SELECT username, coins FROM economy ORDER BY coins DESC LIMIT ?", (limit,)
         ).fetchall()
 
-    def claim_daily(self, user_id, username):
-        """Try to claim the daily reward. Returns ``(claimed, reward, streak, coins)``;
-        ``claimed`` is False (reward 0) if it was already claimed today."""
+    def claim_daily(self, user_id, username, today=None):
+        """Try to claim the daily reward. Returns ``(claimed, reward, streak, coins, extras)``;
+        ``claimed`` is False (reward 0) if it was already claimed today. ``reward`` is the
+        base streak reward; ``extras`` carries any shield rescue or milestone bonus."""
+        today = today or datetime.datetime.now(datetime.timezone.utc).date()
         cur = self._conn.cursor()
         row = cur.execute("SELECT coins, streak, last_daily FROM economy WHERE user_id = ?", (user_id,)).fetchone()
-        today = datetime.datetime.now(datetime.timezone.utc).date()
         if row is None:
             coins, streak, last_date = 0, 0, None
         else:
@@ -137,17 +167,55 @@ class EconomyService:
 
         claimed, new_streak, reward = daily_outcome(last_date, today, streak)
         if not claimed:
-            return False, 0, streak, coins
+            return False, 0, streak, coins, {}
 
-        coins += reward
+        # A single missed day (a 2-day gap) is rescued if the user holds a streak shield.
+        shield_saved = False
+        if (
+            new_streak == 1
+            and last_date is not None
+            and (today - last_date).days == 2
+            and self.owns(user_id, "streakshield")
+        ):
+            self.consume_streakshield(user_id)
+            new_streak = streak + 1
+            reward = BASE_DAILY + min(new_streak - 1, STREAK_CAP_DAYS) * STREAK_BONUS
+            shield_saved = True
+
+        milestone_coins, milestone_id = streak_milestone(new_streak)
+        coins += reward + milestone_coins
         cur.execute(
             "INSERT INTO economy (user_id, username, coins, streak, last_daily) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(user_id) DO UPDATE SET username = excluded.username, coins = excluded.coins, "
             "streak = excluded.streak, last_daily = excluded.last_daily",
             (user_id, username, coins, new_streak, today.isoformat()),
         )
+        milestone_title = None
+        if milestone_id:  # grant and auto-equip the earned title so the reward shows at once
+            self._conn.execute(
+                "INSERT OR IGNORE INTO cosmetics (user_id, item_id) VALUES (?, ?)", (user_id, milestone_id)
+            )
+            self._conn.execute("UPDATE economy SET title = ? WHERE user_id = ?", (milestone_id, user_id))
+            milestone_title = GRANTED_TITLES[milestone_id]
         self._conn.commit()
-        return True, reward, new_streak, coins
+        extras = {"shield_saved": shield_saved, "milestone_coins": milestone_coins, "milestone_title": milestone_title}
+        return True, reward, new_streak, coins, extras
+
+    # --- streak shield (a one-shot cosmetics item) ---
+    def buy_streakshield(self, user_id, username):
+        """Buy a streak shield. Returns 'bought', 'have' (already holding one), or 'poor'."""
+        if self.owns(user_id, "streakshield"):
+            return "have"
+        if not self.spend(user_id, STREAKSHIELD_PRICE):
+            return "poor"
+        self._conn.execute("INSERT OR IGNORE INTO cosmetics (user_id, item_id) VALUES (?, 'streakshield')", (user_id,))
+        self._conn.execute("UPDATE economy SET username = ? WHERE user_id = ?", (username, user_id))
+        self._conn.commit()
+        return "bought"
+
+    def consume_streakshield(self, user_id):
+        self._conn.execute("DELETE FROM cosmetics WHERE user_id = ? AND item_id = 'streakshield'", (user_id,))
+        self._conn.commit()
 
     def claim_first_win(self, user_id, username, today=None):
         """Grant the first-win-of-the-day bonus once per UTC day. Credits the coins
@@ -184,6 +252,11 @@ class EconomyService:
     def buy_title(self, user_id, username, item_id):
         """Buy and equip a title. Returns 'bought', 'equipped' (already owned, just
         re-equipped, no charge), 'poor', or 'unknown'."""
+        if item_id in GRANTED_TITLES:  # earned, not bought: only equip if already owned
+            if self.owns(user_id, item_id):
+                self.equip_title(user_id, item_id)
+                return "equipped"
+            return "unknown"
         if item_id not in TITLES:
             return "unknown"
         if self.owns(user_id, item_id):
