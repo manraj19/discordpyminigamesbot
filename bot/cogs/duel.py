@@ -204,6 +204,7 @@ class Duel(commands.Cog):
         )
         embed.add_field(name="Gear", value=gear, inline=True)
         embed.add_field(name="Loadout (Strike + …)", value=loadout, inline=True)
+        embed.set_footer(text="Overall stats and per-game scores in ;profile")
         return embed
 
     def _shop_embed(self, member):

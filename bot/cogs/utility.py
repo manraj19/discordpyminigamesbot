@@ -150,10 +150,14 @@ class Utility(commands.Cog):
             inline=True,
         )
         coins, streak = self.bot.economy.balance(user.id)
-        embed.add_field(name="🪙 MiniCoins", value=f"{coins}\n{emojis.STREAK} {streak}-day streak", inline=True)
+        shield = f"\n{emojis.SHIELD} streak shield ready" if self.bot.economy.owns(user.id, "streakshield") else ""
+        embed.add_field(name="🪙 MiniCoins", value=f"{coins}\n{emojis.STREAK} {streak}-day streak{shield}", inline=True)
+        embed.add_field(
+            name="⚔️ Duel", value=f"Rating **{rec['rating']}**\n{rec['wins']}W / {rec['losses']}L", inline=True
+        )
         earned = len(self.bot.economy.earned_achievements(user.id))
         embed.add_field(name="🏅 Achievements", value=f"{earned}/{len(ACHIEVEMENTS)}", inline=True)
-        embed.set_footer(text="Overall stats across all servers")
+        embed.set_footer(text="Stats across all servers · gear and loadout in ;duelist")
         return embed
 
     @commands.command()
