@@ -58,7 +58,8 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
     balls_faced = {player: 0 for player in batting_team}
     player_scores = {player: 0 for player in batting_team}
     player_wickets = {player: 0 for player in bowling_team}
-    bowler_overs = {player: 0 for player in bowling_team}
+    bowler_overs = {player: 0 for player in bowling_team}  # whole overs started, for the cap
+    bowling = {player: [0, 0] for player in bowling_team}  # [balls bowled, runs conceded] for figures
     events = []
     fifty_highlighted = set()
     hundred_highlighted = set()
@@ -99,6 +100,7 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
             if wickets >= 10:
                 break
             balls_bowled += 1
+            bowling[bowler][0] += 1
             batsman = batting_team[striker]
             balls_faced[batsman] += 1
             outcome = random.choices(OUTCOMES, weights=_batting_weights(striker))[0]
@@ -133,6 +135,7 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
                 scored = RUNS[outcome]
                 runs += scored
                 player_scores[batsman] += scored
+                bowling[bowler][1] += scored
                 if outcome == "four":
                     emit(f"{emojis.BATBALL} FOUR! {batsman} finds the boundary.", "boundary")
                 elif outcome == "six":
@@ -159,7 +162,7 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
                     chased,
                     overs_played,
                     balls_faced,
-                    bowler_overs,
+                    bowling,
                 )
 
         striker, non_striker = non_striker, striker  # end of the over: strike rotates
@@ -167,14 +170,22 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
             emit(f"End of over {balls_bowled // 6}: {runs}/{wickets}.", "over")
 
     overs_played = balls_bowled // 6 + (balls_bowled % 6) / 10
-    return runs, wickets, player_scores, player_wickets, events, chased, overs_played, balls_faced, bowler_overs
+    return runs, wickets, player_scores, player_wickets, events, chased, overs_played, balls_faced, bowling
 
 
-def get_top_performers(player_scores, player_wickets, balls_faced):
+def get_top_performers(player_scores, player_wickets, balls_faced, bowling):
+    """Top batting and bowling rows for the summary tables. Bowlers show real
+    figures (overs, runs conceded, wickets), best wicket-takers first with the
+    cheaper spell breaking ties."""
     top_batsmen = sorted(player_scores.items(), key=lambda x: x[1], reverse=True)[:4]
-    top_bowlers = sorted(player_wickets.items(), key=lambda x: x[1], reverse=True)[:4]
     top_batsmen_with_sr = [
         (player, runs, balls_faced[player], (runs / balls_faced[player]) * 100 if balls_faced[player] > 0 else 0)
         for player, runs in top_batsmen
     ]
-    return top_batsmen_with_sr, top_bowlers
+    bowlers = [
+        (player, _overs_str(balls), conceded, player_wickets[player])
+        for player, (balls, conceded) in bowling.items()
+        if balls
+    ]
+    bowlers.sort(key=lambda row: (-row[3], row[2]))
+    return top_batsmen_with_sr, bowlers[:4]

@@ -5,6 +5,7 @@ Coin spending lives in the economy service; this only grants/equips what the cog
 has already paid for, and tracks combat progression.
 """
 
+import datetime
 import sqlite3
 
 from bot.games.duel import (
@@ -15,6 +16,13 @@ from bot.games.duel import (
     START_RATING,
     STARTER_ABILITIES,
     level_for_xp,
+)
+
+# Explicit column order for duelist reads, so rows stay stable no matter what
+# order the ALTER TABLE upgrades ran in.
+_COLUMNS = (
+    "user_id, username, xp, rating, wins, losses, trophies, weapon, armor, accessory, loadout, "
+    "arena_floor, arena_day, arena_attempts, ranked_games, ranked_streak"
 )
 
 
@@ -43,6 +51,20 @@ class DuelService:
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS duel_abilities (user_id INTEGER, ability_id TEXT, PRIMARY KEY (user_id, ability_id))"
         )
+        # Upgrade older tables that predate later columns (same pattern as economy).
+        cols = [r[1] for r in self._conn.execute("PRAGMA table_info(duelists)")]
+        for name, ddl in (
+            ("arena_floor", "INTEGER NOT NULL DEFAULT 0"),
+            ("arena_day", "TEXT"),
+            ("arena_attempts", "INTEGER NOT NULL DEFAULT 0"),
+            ("ranked_games", "INTEGER NOT NULL DEFAULT 0"),
+            ("ranked_streak", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if name not in cols:
+                self._conn.execute(f"ALTER TABLE duelists ADD COLUMN {name} {ddl}")
+        gear_cols = [r[1] for r in self._conn.execute("PRAGMA table_info(duel_gear)")]
+        if "level" not in gear_cols:
+            self._conn.execute("ALTER TABLE duel_gear ADD COLUMN level INTEGER NOT NULL DEFAULT 0")
         self._conn.commit()
 
     def _row_to_dict(self, row):
@@ -58,12 +80,17 @@ class DuelService:
             "armor": row[8],
             "accessory": row[9],
             "loadout": [a for a in (row[10] or "").split(",") if a],
+            "arena_floor": row[11],
+            "arena_day": row[12],
+            "arena_attempts": row[13],
+            "ranked_games": row[14],
+            "ranked_streak": row[15],
         }
         d["level"] = level_for_xp(d["xp"])
         return d
 
     def get(self, user_id):
-        row = self._conn.execute("SELECT * FROM duelists WHERE user_id = ?", (user_id,)).fetchone()
+        row = self._conn.execute(f"SELECT {_COLUMNS} FROM duelists WHERE user_id = ?", (user_id,)).fetchone()
         return self._row_to_dict(row) if row else None
 
     def get_or_create(self, user_id, username):
@@ -107,6 +134,51 @@ class DuelService:
     def grant_gear(self, user_id, item_id):
         self._conn.execute("INSERT OR IGNORE INTO duel_gear (user_id, item_id) VALUES (?, ?)", (user_id, item_id))
         self._conn.commit()
+
+    def gear_level(self, user_id, item_id):
+        row = self._conn.execute(
+            "SELECT level FROM duel_gear WHERE user_id = ? AND item_id = ?", (user_id, item_id)
+        ).fetchone()
+        return row[0] if row else 0
+
+    def gear_levels(self, user_id):
+        """All owned gear as {item_id: enhancement_level}."""
+        return dict(self._conn.execute("SELECT item_id, level FROM duel_gear WHERE user_id = ?", (user_id,)))
+
+    def enhance_gear(self, user_id, item_id):
+        """Raise an owned item's enhancement by one. Returns the new level.
+        Affordability and the +5 cap are the caller's checks."""
+        self._conn.execute(
+            "UPDATE duel_gear SET level = level + 1 WHERE user_id = ? AND item_id = ?", (user_id, item_id)
+        )
+        self._conn.commit()
+        return self.gear_level(user_id, item_id)
+
+    def max_gear_level(self, user_id):
+        """The user's highest enhancement level (for the Honed achievement)."""
+        row = self._conn.execute("SELECT MAX(level) FROM duel_gear WHERE user_id = ?", (user_id,)).fetchone()
+        return row[0] or 0
+
+    # --- arena tower ---
+    def use_arena_attempt(self, user_id, cap, today=None):
+        """Spend one of today's arena attempts. Returns ``(allowed, remaining_after)``.
+        The counter resets when the stored day is not today (UTC)."""
+        today = today or datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+        rec = self.get(user_id)
+        used = rec["arena_attempts"] if rec and rec["arena_day"] == today else 0
+        if used >= cap:
+            return False, 0
+        self._conn.execute(
+            "UPDATE duelists SET arena_day = ?, arena_attempts = ? WHERE user_id = ?", (today, used + 1, user_id)
+        )
+        self._conn.commit()
+        return True, cap - used - 1
+
+    def advance_arena_floor(self, user_id):
+        """Record a floor clear. Returns the new highest cleared floor."""
+        self._conn.execute("UPDATE duelists SET arena_floor = arena_floor + 1 WHERE user_id = ?", (user_id,))
+        self._conn.commit()
+        return self.get(user_id)["arena_floor"]
 
     def equip(self, user_id, item_id):
         """Equip owned gear into its slot. Returns 'equipped', 'unowned', or 'unknown'."""
@@ -152,8 +224,9 @@ class DuelService:
         return "ok"
 
     # --- results ---
-    def apply_match(self, user_id, username, won, xp_gain, new_rating=None, trophies=0):
+    def apply_match(self, user_id, username, won, xp_gain, new_rating=None, trophies=0, ranked=False):
         """Record one player's match outcome (W/L, xp, optional new rating, trophies).
+        ``ranked`` also bumps the placement counter and the ranked win streak.
         Returns ``(new_level, leveled_up)`` so the caller can announce a level-up."""
         rec = self.get_or_create(user_id, username)
         sets = ["username = ?", "xp = xp + ?", "wins = wins + ?", "losses = losses + ?", "trophies = trophies + ?"]
@@ -161,6 +234,9 @@ class DuelService:
         if new_rating is not None:
             sets.append("rating = ?")
             params.append(new_rating)
+        if ranked:
+            sets.append("ranked_games = ranked_games + 1")
+            sets.append("ranked_streak = ranked_streak + 1" if won else "ranked_streak = 0")
         params.append(user_id)
         self._conn.execute(f"UPDATE duelists SET {', '.join(sets)} WHERE user_id = ?", params)
         self._conn.commit()
@@ -169,7 +245,8 @@ class DuelService:
 
     def top(self, limit=10):
         return self._conn.execute(
-            "SELECT username, rating, wins, losses FROM duelists ORDER BY rating DESC LIMIT ?", (limit,)
+            "SELECT username, rating, wins, losses, ranked_streak FROM duelists ORDER BY rating DESC LIMIT ?",
+            (limit,),
         ).fetchall()
 
     def reset_season(self):

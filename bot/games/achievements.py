@@ -25,6 +25,10 @@ ACHIEVEMENTS = {
     "warlord": ("Warlord", "Win 50 duels.", 1500, lambda s: s["duel_wins"] >= 50),
     "contender": ("Contender", "Reach 1,200 duel rating.", 500, lambda s: s["duel_rating"] >= 1200),
     "master": ("Master", "Reach 1,400 duel rating.", 1500, lambda s: s["duel_rating"] >= 1400),
+    # Phase C stats use .get so older callers without these keys stay safe.
+    "tower_breaker": ("Tower Breaker", "Clear arena floor 10.", 500, lambda s: s.get("arena_floor", 0) >= 10),
+    "ascendant": ("Ascendant", "Clear arena floor 25.", 1500, lambda s: s.get("arena_floor", 0) >= 25),
+    "honed": ("Honed", "Enhance a piece of gear to +5.", 500, lambda s: s.get("max_gear_level", 0) >= 5),
 }
 
 

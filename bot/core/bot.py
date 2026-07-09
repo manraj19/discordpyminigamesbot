@@ -177,6 +177,8 @@ class MiniGamesBot(commands.AutoShardedBot):
             "streak": streak,
             "duel_wins": duelist["wins"] if duelist else 0,
             "duel_rating": duelist["rating"] if duelist else 1000,
+            "arena_floor": duelist["arena_floor"] if duelist else 0,
+            "max_gear_level": self.duel.max_gear_level(user_id),
         }
         newly = []
         for aid in evaluate_achievements(stats):

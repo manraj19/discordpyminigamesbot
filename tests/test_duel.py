@@ -96,7 +96,7 @@ def test_ai_picks_a_legal_move():
 
 def test_aggregate_stats_adds_gear_and_levels():
     base = aggregate_stats(1)
-    assert base == {"max_hp": 100, "max_energy": 6, "attack": 0, "defense": 0}
+    assert base == {"max_hp": 100, "max_energy": 6, "attack": 0, "defense": 0, "regen": 0, "keep_momentum": False}
     geared = aggregate_stats(3, weapon="steel_sword", armor="chainmail", accessory="power_band")
     assert geared["attack"] == 7
     assert geared["defense"] == 4

@@ -46,6 +46,8 @@ TITLES = {
 GRANTED_TITLES = {
     "committed": "The Committed",
     "ironwilled": "Iron Willed",
+    "towerbreaker": "Tower Breaker",
+    "ascendant": "Ascendant",
 }
 
 
@@ -247,6 +249,19 @@ class EconomyService:
 
     def equip_title(self, user_id, item_id):
         self._conn.execute("UPDATE economy SET title = ? WHERE user_id = ?", (item_id, user_id))
+        self._conn.commit()
+
+    def grant_title(self, user_id, username, item_id, equip=True):
+        """Grant (and by default equip) an earned title, creating the economy row
+        if needed. Used by milestone-style rewards, never by the shop."""
+        self._conn.execute(
+            "INSERT INTO economy (user_id, username, coins) VALUES (?, ?, 0) "
+            "ON CONFLICT(user_id) DO UPDATE SET username = excluded.username",
+            (user_id, username),
+        )
+        self._conn.execute("INSERT OR IGNORE INTO cosmetics (user_id, item_id) VALUES (?, ?)", (user_id, item_id))
+        if equip:
+            self._conn.execute("UPDATE economy SET title = ? WHERE user_id = ?", (item_id, user_id))
         self._conn.commit()
 
     def buy_title(self, user_id, username, item_id):

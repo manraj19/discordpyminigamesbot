@@ -17,15 +17,22 @@ from bot.core.rewards import RewardResult
 from bot.core.utils import invalid_opponent
 from bot.games.duel import (
     ABILITIES,
+    ARENA_DAILY_CAP,
+    ENHANCE_MAX,
     GEAR,
     RANK_MAX_GAP,
     aggregate_stats,
+    arena_opponent,
+    arena_reward,
     can_rank,
     elo_update,
+    enhance_cost,
     make_combatant,
     new_duel,
+    ranked_k,
 )
-from bot.views.duel import DuelChallengeView, DuelView, LoadoutView, rules_embed
+from bot.services.economy import title_name
+from bot.views.duel import DuelChallengeView, DuelView, LoadoutView, add_lines_field, rules_embed
 
 CASUAL_WIN_COINS = 20
 CASUAL_WIN_XP = 15
@@ -33,10 +40,10 @@ CASUAL_LOSS_XP = 5
 RANKED_WIN_XP = 25
 RANKED_LOSS_XP = 8
 RANKED_TROPHIES = 10
-ARENA_WIN_COINS = 30
+RANKED_STREAK_FIRE = 3  # ranked win streak that earns a 🔥 on the leaderboard
 ARENA_WIN_XP = 20
 ARENA_LOSS_XP = 5
-ARENA_LOADOUT = ["heavy", "guard", "bleed", "mend"]
+ARENA_TITLE_FLOORS = {10: "towerbreaker", 25: "ascendant"}  # floor -> granted title id
 
 
 class Duel(commands.Cog):
@@ -46,7 +53,8 @@ class Duel(commands.Cog):
     # --- shared helpers ---
     def _fighter(self, member, name=None):
         rec = self.bot.duel.get_or_create(member.id, str(member))
-        stats = aggregate_stats(rec["level"], rec["weapon"], rec["armor"], rec["accessory"])
+        levels = self.bot.duel.gear_levels(member.id)
+        stats = aggregate_stats(rec["level"], rec["weapon"], rec["armor"], rec["accessory"], levels)
         return make_combatant(name or member.display_name, stats, rec["loadout"]), rec
 
     async def _settle(self, channel, players, records, mode, bet, widx):
@@ -63,11 +71,18 @@ class Duel(commands.Cog):
         winner, loser = players[widx], players[1 - widx]
         if mode == "ranked":
             wr, lr = records[widx]["rating"], records[1 - widx]["rating"]
-            new_w, new_l = elo_update(wr, lr)
-            win_level = self.bot.duel.apply_match(
-                winner.id, str(winner), True, RANKED_WIN_XP, new_rating=new_w, trophies=RANKED_TROPHIES
+            new_w, new_l = elo_update(
+                wr,
+                lr,
+                k=ranked_k(records[widx]["ranked_games"]),
+                k_loser=ranked_k(records[1 - widx]["ranked_games"]),
             )
-            loss_level = self.bot.duel.apply_match(loser.id, str(loser), False, RANKED_LOSS_XP, new_rating=new_l)
+            win_level = self.bot.duel.apply_match(
+                winner.id, str(winner), True, RANKED_WIN_XP, new_rating=new_w, trophies=RANKED_TROPHIES, ranked=True
+            )
+            loss_level = self.bot.duel.apply_match(
+                loser.id, str(loser), False, RANKED_LOSS_XP, new_rating=new_l, ranked=True
+            )
             level_up, bonus = self.bot.apply_level_up(winner.id, str(winner), win_level)
             self.bot.apply_level_up(loser.id, str(loser), loss_level)
             new = self.bot.award_achievements(winner.id, str(winner))
@@ -150,44 +165,73 @@ class Duel(commands.Cog):
 
     async def _arena(self, channel, member):
         human, rec = self._fighter(member)
-        ai_stats = aggregate_stats(rec["level"])
-        ai_stats["attack"] += 2  # a little edge so it isn't a pushover
-        ai_fighter = make_combatant("🤖 Arena Bot", ai_stats, ARENA_LOADOUT)
-        ai_user = SimpleNamespace(display_name="🤖 Arena Bot", id=0)
+        floor = rec["arena_floor"] + 1  # you always fight the next uncleared floor
+        allowed, left = self.bot.duel.use_arena_attempt(member.id, ARENA_DAILY_CAP)
+        if not allowed:
+            await channel.send(
+                f"You're out of arena attempts for today ({ARENA_DAILY_CAP} per day). They refresh at UTC midnight."
+            )
+            return
+        name, ai_stats, kit, is_boss = arena_opponent(floor, rec["level"])
+        label = f"🤖 {name}"
+        ai_fighter = make_combatant(label, ai_stats, kit)
+        ai_user = SimpleNamespace(display_name=label, id=0)
         state = new_duel(human, ai_fighter, 0)  # human moves first vs the bot
 
         async def on_end(widx):
             if widx == 0:
-                self.bot.economy.add_coins(member.id, str(member), ARENA_WIN_COINS)
+                coins = arena_reward(floor, is_boss)
+                self.bot.economy.add_coins(member.id, str(member), coins)
+                new_floor = self.bot.duel.advance_arena_floor(member.id)
                 win_level = self.bot.duel.apply_match(member.id, str(member), True, ARENA_WIN_XP)
                 level_up, bonus = self.bot.apply_level_up(member.id, str(member), win_level)
+                title_id = ARENA_TITLE_FLOORS.get(new_floor)
+                if title_id:
+                    self.bot.economy.grant_title(member.id, str(member), title_id)
                 new = self.bot.award_achievements(member.id, str(member))
                 quests, q_level, q_bonus = self.bot.quest_event(member.id, str(member), "duel_win", 1)
-                msg = f"{emojis.TROPHY} {member.mention} cleared the arena! +{ARENA_WIN_COINS} MiniCoins {emojis.COIN}"
+                what = "felled the boss on" if is_boss else "cleared"
+                msg = f"{emojis.TROPHY} {member.mention} {what} floor **{floor}**! Floor {floor + 1} awaits."
+                if title_id:
+                    msg += f"\n🗼 You earned the title **{title_name(title_id)}**!"
                 extra = RewardResult(
-                    coins=bonus + q_bonus, level_up=q_level or level_up, new_achievements=new, quests=quests
+                    coins=coins + bonus + q_bonus,
+                    xp=ARENA_WIN_XP,
+                    level_up=q_level or level_up,
+                    new_achievements=new,
+                    quests=quests,
                 ).line()
                 if extra:
                     msg += f"\n{extra}"
                 await channel.send(msg)
             elif widx == "draw":
-                await channel.send(f"🤝 {member.mention} drew with the Arena Bot. Gear up and try again.")
+                await channel.send(f"🤝 {member.mention} drew with {name} on floor {floor}. Try again, it's free.")
             else:
                 loss_level = self.bot.duel.apply_match(member.id, str(member), False, ARENA_LOSS_XP)
                 self.bot.apply_level_up(member.id, str(member), loss_level)
-                await channel.send(f"💀 The Arena Bot beat {member.mention}. Gear up and try again.")
+                note = f"{left} attempts left today." if left else "That was your last attempt for today."
+                await channel.send(f"💀 {name} holds floor {floor} against {member.mention}. {note}")
 
         await channel.send(embed=rules_embed())
+        boss_tag = " · **BOSS**" if is_boss else ""
+        await channel.send(f"🗼 **Arena floor {floor}**{boss_tag} · vs {label} · {left} attempts left after this one.")
         view = DuelView([member, ai_user], state, on_end=on_end, ai_index=1)
         view.render_turn()
         view.message = await channel.send(embed=view.embed(), view=view)
 
     # --- embeds ---
+    @staticmethod
+    def _gear_label(item_id, levels):
+        """Display name with its enhancement, e.g. ``Warblade +3``."""
+        level = levels.get(item_id, 0)
+        return GEAR[item_id]["name"] + (f" +{level}" if level else "")
+
     def _duelist_embed(self, member):
         rec = self.bot.duel.get_or_create(member.id, str(member))
-        stats = aggregate_stats(rec["level"], rec["weapon"], rec["armor"], rec["accessory"])
+        levels = self.bot.duel.gear_levels(member.id)
+        stats = aggregate_stats(rec["level"], rec["weapon"], rec["armor"], rec["accessory"], levels)
         gear = "\n".join(
-            f"{slot.capitalize()}: {GEAR[rec[slot]]['name'] if rec[slot] else 'None'}"
+            f"{slot.capitalize()}: {self._gear_label(rec[slot], levels) if rec[slot] else 'None'}"
             for slot in ("weapon", "armor", "accessory")
         )
         loadout = ", ".join(ABILITIES[a].name for a in rec["loadout"]) or "None"
@@ -196,6 +240,7 @@ class Duel(commands.Cog):
         embed.add_field(name="Rating", value=f"{rec['rating']} 📊", inline=True)
         embed.add_field(name="Record", value=f"{rec['wins']}W / {rec['losses']}L", inline=True)
         embed.add_field(name="Trophies", value=f"{rec['trophies']} {emojis.TROPHY}", inline=True)
+        embed.add_field(name="Arena", value=f"🗼 Floor {rec['arena_floor']}", inline=True)
         embed.add_field(
             name="Stats",
             value=f"{emojis.HEALTH} {stats['max_hp']}  {emojis.ENERGY} {stats['max_energy']}  "
@@ -209,16 +254,22 @@ class Duel(commands.Cog):
 
     def _shop_embed(self, member):
         owned = set(self.bot.duel.owned_gear(member.id))
+        levels = self.bot.duel.gear_levels(member.id)
         unlocked = set(self.bot.duel.unlocked_abilities(member.id))
         gear_lines = []
         for gid, g in GEAR.items():
             stat_bits = " ".join(
-                f"+{v} {k.replace('max_', '')}"
+                f"{v:+d} {k.replace('max_', '')}"
                 for k, v in g.items()
                 if k in ("attack", "defense", "max_hp", "max_energy")
             )
-            tag = "✅ owned" if gid in owned else f"{g['price']} {emojis.COIN}"
-            gear_lines.append(f"`{gid}` {g['name']} ({g['slot']}) · {stat_bits} · {tag}")
+            bits = stat_bits or g.get("desc", "")
+            tag = (
+                f"✅ owned{f' +{levels[gid]}' if levels.get(gid) else ''}"
+                if gid in owned
+                else f"{g['price']} {emojis.COIN}"
+            )
+            gear_lines.append(f"`{gid}` {g['name']} ({g['slot']}) · {bits} · {tag}")
         abil_lines = []
         for aid, ab in ABILITIES.items():
             if ab.price <= 0:
@@ -226,10 +277,8 @@ class Duel(commands.Cog):
             tag = "✅ unlocked" if aid in unlocked else f"{ab.price} {emojis.COIN}"
             abil_lines.append(f"`{aid}` {ab.name}: {ab.desc} · {tag}")
         embed = discord.Embed(title="🛒 Duel Shop", color=discord.Color.dark_red())
-        embed.add_field(name="Gear · `;buygear <id>` then `;equip <id>`", value="\n".join(gear_lines), inline=False)
-        embed.add_field(
-            name="Abilities · `;buyability <id>` then `;loadout`", value="\n".join(abil_lines), inline=False
-        )
+        add_lines_field(embed, "Gear · `;buygear <id>`, `;equip <id>`, upgrade with `;enhance <id>`", gear_lines)
+        add_lines_field(embed, "Abilities · `;buyability <id>` then `;loadout`", abil_lines)
         return embed
 
     def _rank_embed(self):
@@ -239,7 +288,8 @@ class Duel(commands.Cog):
                 title="📊 Duel Rankings", description="No duelists yet.", color=discord.Color.dark_red()
             )
         desc = "\n".join(
-            f"{i}. {name} · **{rating}** ({wins}W/{losses}L)" for i, (name, rating, wins, losses) in enumerate(rows, 1)
+            f"{i}. {name} · **{rating}** ({wins}W/{losses}L){' 🔥' if streak >= RANKED_STREAK_FIRE else ''}"
+            for i, (name, rating, wins, losses, streak) in enumerate(rows, 1)
         )
         return discord.Embed(title="📊 Duel Rankings", description=desc, color=discord.Color.dark_red())
 
@@ -375,6 +425,35 @@ class Duel(commands.Cog):
         self.bot.duel.get_or_create(ctx.author.id, str(ctx.author))
         self.bot.duel.unlock_ability(ctx.author.id, ability)
         await ctx.send(f"Unlocked **{ab.name}**! Add it to your kit with `;loadout`.")
+
+    @commands.command()
+    async def enhance(self, ctx, item: str):
+        item = item.lower()
+        if item not in GEAR:
+            await ctx.send("No such gear. See `;duelshop`.")
+            return
+        if not self.bot.duel.owns_gear(ctx.author.id, item):
+            await ctx.send("You don't own that gear. Buy it with `;buygear` first.")
+            return
+        level = self.bot.duel.gear_level(ctx.author.id, item)
+        if level >= ENHANCE_MAX:
+            await ctx.send(f"**{GEAR[item]['name']} +{level}** is already fully enhanced.")
+            return
+        cost = enhance_cost(level)
+        if not self.bot.economy.spend(ctx.author.id, cost):
+            await ctx.send(f"Enhancing to **+{level + 1}** costs **{cost}** MiniCoins. Earn some more first.")
+            return
+        new_level = self.bot.duel.enhance_gear(ctx.author.id, item)
+        slot = GEAR[item]["slot"]
+        per = {"weapon": "+1 attack", "armor": "+1 defense", "accessory": "+4 max HP"}[slot]
+        msg = f"🔨 **{GEAR[item]['name']} +{new_level}** ({per} per level)."
+        if new_level < ENHANCE_MAX:
+            msg += f" Next level costs {enhance_cost(new_level)} {emojis.COIN}."
+        new = self.bot.award_achievements(ctx.author.id, str(ctx.author))
+        extra = RewardResult(new_achievements=new).line()
+        if extra:
+            msg += f"\n{extra}"
+        await ctx.send(msg)
 
     @commands.command()
     async def equip(self, ctx, item: str):

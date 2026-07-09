@@ -4,7 +4,7 @@ embed. All combat rules live in bot.games.duel; this only renders and routes."""
 import discord
 
 from bot.core import emojis
-from bot.games.duel import ABILITIES, DRAW, LOADOUT_SIZE, ai_choose, step
+from bot.games.duel import ABILITIES, DRAW, LOADOUT_SIZE, ai_choose, available_moves, step
 
 _STYLE = {
     "strike": discord.ButtonStyle.danger,
@@ -15,11 +15,31 @@ _STYLE = {
     "drain": discord.ButtonStyle.danger,
     "cripple": discord.ButtonStyle.danger,
     "finisher": discord.ButtonStyle.danger,
+    "rupture": discord.ButtonStyle.danger,
+    "shatter": discord.ButtonStyle.danger,
+    "twinstrike": discord.ButtonStyle.danger,
     "guard": discord.ButtonStyle.success,
     "mend": discord.ButtonStyle.success,
+    "ward": discord.ButtonStyle.success,
+    "riposte": discord.ButtonStyle.success,
+    "adrenaline": discord.ButtonStyle.success,
     "focus": discord.ButtonStyle.secondary,
     "sharpen": discord.ButtonStyle.secondary,
 }
+
+
+def add_lines_field(embed, name, lines):
+    """Add lines as one or more embed fields, splitting at Discord's 1024-char
+    field limit. Continuation fields get a blank name so they read as one block."""
+    chunk = []
+    field_name = name
+    for line in lines:
+        if sum(len(x) + 1 for x in chunk) + len(line) > 1024:
+            embed.add_field(name=field_name, value="\n".join(chunk), inline=False)
+            chunk, field_name = [], "​"
+        chunk.append(line)
+    if chunk:
+        embed.add_field(name=field_name, value="\n".join(chunk), inline=False)
 
 
 def rules_embed():
@@ -33,14 +53,19 @@ def rules_embed():
             f"**Status effects:** {emojis.BLEED} bleed and {emojis.POISON} poison deal damage at the start of "
             f"your turns · {emojis.SHIELD} shield soaks damage · {emojis.STUN} stun skips your next turn · "
             "🔻 weaken lowers attack · 🔺 sharpen raises it.\n\n"
+            "🔥 **Momentum:** every turn you land damage adds a stack (+2 attack each, up to 5). Playing "
+            "Guard, Mend, or Focus resets it, so turtling costs you your ramp. Some abilities also have a "
+            "**cooldown** (CD) of a few turns after use.\n\n"
             "Your kit is **Strike** (always available) plus your loadout. Buy gear and abilities in "
             "`;duelshop`, equip with `;equip`, and set your loadout with `;loadout`."
         ),
     )
-    kit = "\n".join(
-        f"**{ab.name}** ({'free' if ab.cost == 0 else f'{ab.cost}⚡'}): {ab.desc}" for ab in ABILITIES.values()
-    )
-    embed.add_field(name="Abilities", value=kit, inline=False)
+    lines = []
+    for ab in ABILITIES.values():
+        cost = "free" if ab.cost == 0 else f"{ab.cost}⚡"
+        cd = f", CD {ab.cooldown}" if ab.cooldown else ""
+        lines.append(f"**{ab.name}** ({cost}{cd}): {ab.desc}")
+    add_lines_field(embed, "Abilities", lines)
     return embed
 
 
@@ -59,6 +84,10 @@ def _status_line(c):
         effects.append(f"🔻{c.weaken}")
     if c.empower:
         effects.append(f"🔺{c.empower}")
+    if c.momentum:
+        effects.append(f"🔥{c.momentum}")
+    if c.riposte_ready:
+        effects.append("↩️")
     line = "  ".join(parts)
     if effects:
         line += "\n" + " ".join(effects)
@@ -66,9 +95,11 @@ def _status_line(c):
 
 
 class AbilityButton(discord.ui.Button):
-    def __init__(self, ability_id):
+    def __init__(self, ability_id, cooldown_left=0):
         ab = ABILITIES[ability_id]
         label = ab.name if ab.cost == 0 else f"{ab.name} ({ab.cost}⚡)"
+        if cooldown_left:
+            label += f" (CD {cooldown_left})"
         super().__init__(label=label, style=_STYLE.get(ability_id, discord.ButtonStyle.secondary))
         self.ability_id = ability_id
 
@@ -90,10 +121,11 @@ class DuelView(discord.ui.View):
     def render_turn(self):
         self.clear_items()
         actor = self.state.fighters[self.state.active]
+        legal = set(available_moves(self.state))
         kit = ["strike"] + [a for a in actor.loadout if a != "strike"]
         for ability_id in kit:
-            button = AbilityButton(ability_id)
-            button.disabled = ABILITIES[ability_id].cost > actor.energy
+            button = AbilityButton(ability_id, actor.cooldowns.get(ability_id, 0))
+            button.disabled = ability_id not in legal
             self.add_item(button)
 
     def disable_all(self):
@@ -129,8 +161,8 @@ class DuelView(discord.ui.View):
             msg = "It's not your turn!" if interaction.user.id in self.controllable else "This isn't your duel!"
             await interaction.response.send_message(msg, ephemeral=True)
             return
-        if ABILITIES[ability_id].cost > state.fighters[state.active].energy:
-            await interaction.response.send_message("Not enough energy for that move.", ephemeral=True)
+        if ability_id not in available_moves(state):
+            await interaction.response.send_message("That move isn't available right now.", ephemeral=True)
             return
 
         _, log, winner = step(state, ability_id)

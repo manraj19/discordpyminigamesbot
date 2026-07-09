@@ -135,7 +135,7 @@ class Cricket(commands.Cog):
             bat_name, bowl_name = team2_name.content, team1_name.content
 
         # --- First innings (played out live) ---
-        runs1, wickets1, scores1, wkts1, events1, _c1, overs1, balls1, _bo1 = simulate_innings(
+        runs1, wickets1, scores1, wkts1, events1, _c1, overs1, balls1, bowling1 = simulate_innings(
             batting_team, bowling_team, overs, max_overs_per_bowler
         )
         await self._replay(channel, bat_name, 1, events1)
@@ -147,7 +147,7 @@ class Cricket(commands.Cog):
         await asyncio.sleep(2)
 
         # --- Second innings (the chase, played out live) ---
-        runs2, wickets2, scores2, wkts2, events2, _chased, overs2, balls2, _bo2 = simulate_innings(
+        runs2, wickets2, scores2, wkts2, events2, _chased, overs2, balls2, bowling2 = simulate_innings(
             bowling_team, batting_team, overs, max_overs_per_bowler, target=runs1
         )
         await self._replay(channel, bowl_name, 2, events2, target=runs1)
@@ -162,10 +162,10 @@ class Cricket(commands.Cog):
         await asyncio.sleep(1)
 
         # --- Scorecard summary ---
-        tb1, bw1 = get_top_performers(scores1, wkts1, balls1)
-        tb2, bw2 = get_top_performers(scores2, wkts2, balls2)
+        tb1, bw1 = get_top_performers(scores1, wkts1, balls1, bowling1)
+        tb2, bw2 = get_top_performers(scores2, wkts2, balls2, bowling2)
         bat_headers = ["Player", "Runs", "Balls", "SR"]
-        bowl_headers = ["Player", "Wickets"]
+        bowl_headers = ["Player", "Overs", "Runs", "Wkts"]
         embed = discord.Embed(title="📊 Match Summary", color=0x1F8B4C)
         embed.add_field(name="Result", value=result, inline=False)
         embed.add_field(
@@ -175,7 +175,7 @@ class Cricket(commands.Cog):
         )
         embed.add_field(
             name=f"Top bowlers ({bowl_name})",
-            value=f"```\n{tabulate(bw1, headers=bowl_headers, tablefmt='grid')}\n```",
+            value=f"```\n{tabulate(bw1, headers=bowl_headers, tablefmt='grid', disable_numparse=[1])}\n```",
             inline=False,
         )
         embed.add_field(
@@ -185,7 +185,7 @@ class Cricket(commands.Cog):
         )
         embed.add_field(
             name=f"Top bowlers ({bat_name})",
-            value=f"```\n{tabulate(bw2, headers=bowl_headers, tablefmt='grid')}\n```",
+            value=f"```\n{tabulate(bw2, headers=bowl_headers, tablefmt='grid', disable_numparse=[1])}\n```",
             inline=False,
         )
         await channel.send(embed=embed)

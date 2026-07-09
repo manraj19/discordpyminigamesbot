@@ -28,7 +28,19 @@ CATEGORIES = {
     ],
     "Cricket": ["simulate", "playcricket"],
     "Gambling": ["blackjack", "coinflip", "slots"],
-    "Duel": ["duel", "ranked", "arena", "duelist", "duelshop", "buygear", "buyability", "equip", "loadout", "duelrank"],
+    "Duel": [
+        "duel",
+        "ranked",
+        "arena",
+        "duelist",
+        "duelshop",
+        "buygear",
+        "buyability",
+        "equip",
+        "enhance",
+        "loadout",
+        "duelrank",
+    ],
     "Economy & Quests": ["daily", "quests", "balance", "shop", "buy", "richest", "achievements", "vote"],
     "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo"],
 }
@@ -71,9 +83,11 @@ COMMANDS = {
         "instructions": "Moves your ELO rating and awards trophies. Blocked if your ratings are too far apart.",
     },
     "arena": {
-        "desc": "Duel a scaling AI for MiniCoins and XP.",
+        "desc": "Climb the arena tower: each win unlocks the next, harder floor.",
         "aliases": ["pve"],
         "usage": f"{PREFIX}arena",
+        "instructions": "5 attempts a day. Floors scale up and rotate fighting styles; every 5th floor is a "
+        "boss with a bigger payout. First clears pay coins and XP, and floors 10 and 25 grant titles.",
     },
     "duelist": {
         "desc": "View a duelist profile (level, rating, gear, loadout).",
@@ -86,6 +100,12 @@ COMMANDS = {
     "buygear": {"desc": "Buy a piece of duel gear.", "usage": f"{PREFIX}buygear <id>"},
     "buyability": {"desc": "Unlock a duel ability.", "usage": f"{PREFIX}buyability <id>"},
     "equip": {"desc": "Equip owned duel gear.", "usage": f"{PREFIX}equip <id>"},
+    "enhance": {
+        "desc": "Upgrade owned gear up to +5 for a growing coin cost.",
+        "usage": f"{PREFIX}enhance <id>",
+        "instructions": "Each level adds +1 attack (weapons), +1 defense (armor), or +4 max HP (accessories). "
+        "Costs double per level: 300, 600, 1,200, 2,400, 4,800.",
+    },
     "loadout": {
         "desc": "Set your duel ability loadout.",
         "usage": f"{PREFIX}loadout",
