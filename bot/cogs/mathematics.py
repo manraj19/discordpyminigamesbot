@@ -72,7 +72,7 @@ class Mathematics(commands.Cog):
                 else:
                     correct = int(guess.content) == answer
             except ValueError:
-                await channel.send(f"Invalid input! The correct answer was {answer}. Your score is {score}")
+                await channel.send(f"That wasn't a number. The answer was {answer}. Your score is {score}")
                 break
 
             if not correct:
@@ -91,7 +91,7 @@ class Mathematics(commands.Cog):
     async def mathematics(self, ctx, quiz_type: str):
         quiz_type = quiz_type.lower()
         if quiz_type not in QUIZ_TYPES:
-            await ctx.send("Invalid quiz type! Please choose from addition, subtraction, multiplication, or division.")
+            await ctx.send("Pick one of these: addition, subtraction, multiplication, or division.")
             return
         await self._play(ctx.channel, ctx.author, quiz_type)
 

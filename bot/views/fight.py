@@ -130,7 +130,7 @@ class FightView(discord.ui.View):
     async def on_timeout(self):
         for user in (self.user1, self.user2):
             try:
-                await user.send("The fight has ended due to inactivity.")
+                await user.send("Nobody threw a punch, so the fight is over.")
             except discord.HTTPException:
                 pass
         self.stop()

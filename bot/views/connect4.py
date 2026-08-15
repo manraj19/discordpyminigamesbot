@@ -88,7 +88,7 @@ class Connect4View(discord.ui.View):
     async def on_timeout(self):
         if self.message:
             try:
-                await self.message.channel.send("Time's up! The Connect 4 game has ended due to inactivity.")
+                await self.message.channel.send("Time's up. Nobody moved, so the Connect 4 game is over.")
             except discord.HTTPException:
                 pass
         self.stop()

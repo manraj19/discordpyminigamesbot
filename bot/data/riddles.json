@@ -36,7 +36,7 @@
     "answer": "needle"
   },
   {
-    "question": "I’m tall when I’m young, and I’m short when I’m old. What am I?",
+    "question": "I'm tall when I'm young, and I'm short when I'm old. What am I?",
     "answer": "candle"
   },
   {
@@ -52,11 +52,11 @@
     "answer": "darkness"
   },
   {
-    "question": "What has one eye but can’t see?",
+    "question": "What has one eye but can't see?",
     "answer": "needle"
   },
   {
-    "question": "I’m light as a feather, yet the strongest man can’t hold me for much longer. What am I?",
+    "question": "I'm light as a feather, yet the strongest man can't hold me for much longer. What am I?",
     "answer": "breath"
   },
   {
@@ -64,11 +64,11 @@
     "answer": "river"
   },
   {
-    "question": "I’m always in front of you but never seen. What am I?",
+    "question": "I'm always in front of you but never seen. What am I?",
     "answer": "future"
   },
   {
-    "question": "What has many needles but doesn’t sew?",
+    "question": "What has many needles but doesn't sew?",
     "answer": "pine tree"
   },
   {
@@ -84,7 +84,7 @@
     "answer": "rain"
   },
   {
-    "question": "What is always in front of you but can’t be seen?",
+    "question": "What is always in front of you but can't be seen?",
     "answer": "future"
   },
   {
@@ -96,7 +96,7 @@
     "answer": "light"
   },
   {
-    "question": "What has a heart that doesn’t beat?",
+    "question": "What has a heart that doesn't beat?",
     "answer": "artichoke"
   },
   {
@@ -108,7 +108,7 @@
     "answer": "age"
   },
   {
-    "question": "What can’t talk but will reply when spoken to?",
+    "question": "What can't talk but will reply when spoken to?",
     "answer": "echo"
   },
   {
@@ -116,7 +116,7 @@
     "answer": "map"
   },
   {
-    "question": "What has hands but can’t clap?",
+    "question": "What has hands but can't clap?",
     "answer": "clock"
   },
   {
@@ -128,7 +128,7 @@
     "answer": "silence"
   },
   {
-    "question": "What has legs but doesn’t walk?",
+    "question": "What has legs but doesn't walk?",
     "answer": "table"
   },
   {
@@ -144,7 +144,7 @@
     "answer": "pencil lead"
   },
   {
-    "question": "What has 88 keys but can’t open a single door?",
+    "question": "What has 88 keys but can't open a single door?",
     "answer": "piano"
   },
   {
@@ -188,7 +188,7 @@
     "answer": "window"
   },
   {
-    "question": "What has one eye, but can’t see?",
+    "question": "What has one eye, but can't see?",
     "answer": "needle"
   },
   {
@@ -196,7 +196,7 @@
     "answer": "cold"
   },
   {
-    "question": "What has many keys but can’t open a single lock?",
+    "question": "What has many keys but can't open a single lock?",
     "answer": "piano"
   },
   {
@@ -232,7 +232,7 @@
     "answer": "book"
   },
   {
-    "question": "I have keys but no locks. I have a space but no room. You can enter, but you can’t go outside. What am I?",
+    "question": "I have keys but no locks. I have a space but no room. You can enter, but you can't go outside. What am I?",
     "answer": "keyboard"
   },
   {
@@ -304,7 +304,7 @@
     "answer": "tongue"
   },
   {
-    "question": "What has keys that open no locks, with space but no room, and you can enter but you can’t go outside?",
+    "question": "What has keys that open no locks, with space but no room, and you can enter but you can't go outside?",
     "answer": "keyboard"
   },
   {
@@ -312,7 +312,7 @@
     "answer": "e"
   },
   {
-    "question": "What has a thumb and four fingers but isn’t alive?",
+    "question": "What has a thumb and four fingers but isn't alive?",
     "answer": "glove"
   },
   {
@@ -344,7 +344,7 @@
     "answer": "fire"
   },
   {
-    "question": "What is lighter than a feather but the strongest person can’t hold for long?",
+    "question": "What is lighter than a feather but the strongest person can't hold for long?",
     "answer": "breath"
   },
   {
@@ -360,11 +360,7 @@
     "answer": "age"
   },
   {
-    "question": "What has keys but can’t open locks?",
-    "answer": "keyboard"
-  },
-  {
-    "question": "What runs around a house but doesn’t move?",
+    "question": "What runs around a house but doesn't move?",
     "answer": "fence"
   },
   {
@@ -376,7 +372,7 @@
     "answer": "battery"
   },
   {
-    "question": "I am not alive, but I grow. I don’t have lungs, but I need air. What am I?",
+    "question": "I am not alive, but I grow. I don't have lungs, but I need air. What am I?",
     "answer": "fire"
   },
   {
@@ -392,7 +388,7 @@
     "answer": "book"
   },
   {
-    "question": "What is so light, even the strongest person in the world can’t hold it?",
+    "question": "What is so light, even the strongest person in the world can't hold it?",
     "answer": "bubble"
   },
   {
@@ -428,7 +424,7 @@
     "answer": "road"
   },
   {
-    "question": "What has many keys but can’t open a lock?",
+    "question": "What has many keys but can't open a lock?",
     "answer": "piano"
   },
   {
@@ -448,7 +444,7 @@
     "answer": "incorrectly"
   },
   {
-    "question": "I’m not alive, but I can grow. I don’t have lungs, but I need air. What am I?",
+    "question": "I'm not alive, but I can grow. I don't have lungs, but I need air. What am I?",
     "answer": "fire"
   },
   {
@@ -456,7 +452,7 @@
     "answer": "clock"
   },
   {
-    "question": "What is tall when it’s young and short when it’s old?",
+    "question": "What is tall when it's young and short when it's old?",
     "answer": "candle"
   },
   {
@@ -480,7 +476,7 @@
     "answer": "clock"
   },
   {
-    "question": "I’m taken from a mine and shut up in a wooden case, from which I am never released, and yet I am used by almost everyone. What am I?",
+    "question": "I'm taken from a mine and shut up in a wooden case, from which I am never released, and yet I am used by almost everyone. What am I?",
     "answer": "pencil lead"
   },
   {
@@ -500,7 +496,7 @@
     "answer": "keyboard"
   },
   {
-    "question": "I’m lighter than air, but a hundred people can’t lift me. What am I?",
+    "question": "I'm lighter than air, but a hundred people can't lift me. What am I?",
     "answer": "bubble"
   },
   {

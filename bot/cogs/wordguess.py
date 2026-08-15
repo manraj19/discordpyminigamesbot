@@ -67,7 +67,7 @@ class WordGuess(commands.Cog):
 
             guess = message.content.strip().lower()
             if not is_valid_guess(guess):
-                await channel.send("❌ Please type a **5-letter word** (letters only).")
+                await channel.send("❌ That needs to be a **5-letter word**, letters only.")
                 continue
             if guess != answer and not await self._is_word(guess):
                 await channel.send(f"❌ `{guess.upper()}` isn't a word. Try again (it won't cost a guess).")

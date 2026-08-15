@@ -337,7 +337,9 @@ class Duel(commands.Cog):
             await interaction.response.send_message(reason, ephemeral=True)
             return
         if bet < 0 or (bet and self.bot.economy.balance(interaction.user.id)[0] < bet):
-            await interaction.response.send_message("Invalid or unaffordable wager.", ephemeral=True)
+            await interaction.response.send_message(
+                "That wager is either negative or more than you have.", ephemeral=True
+            )
             return
         await interaction.response.send_message(f"{emojis.DUEL} Challenge sent!", ephemeral=True)
         await self._challenge(interaction.channel, interaction.user, opponent, "casual", bet)

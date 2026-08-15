@@ -77,7 +77,7 @@ class TicTacToeView(discord.ui.View):
     async def on_timeout(self):
         if self.message:
             try:
-                await self.message.channel.send("Time's up! The game has ended due to inactivity.")
+                await self.message.channel.send("Time's up. Nobody moved, so I've called it there.")
             except discord.HTTPException:
                 pass
         self.stop()

@@ -33,7 +33,7 @@ class Cricket(commands.Cog):
         try:
             return await self.bot.wait_for("message", check=check, timeout=timeout)
         except asyncio.TimeoutError:
-            await channel.send("You took too long to respond. The simulation has been cancelled.")
+            await channel.send("You took too long, so I've called off the simulation.")
             return None
 
     async def _replay(self, channel, team_name, innings_no, events, target=None):
@@ -84,7 +84,7 @@ class Cricket(commands.Cog):
         if msg.content.lower().strip() == "fill":
             team = self._fill_team(exclude=exclude)
             if team is None:
-                await channel.send("Not enough players left in the roster to auto-fill. Please enter names manually.")
+                await channel.send("Not enough names left in the roster to fill a side. Type the 11 names yourself.")
             return team
         return [p.strip() for p in msg.content.split(",")]
 

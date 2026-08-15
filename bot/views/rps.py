@@ -71,7 +71,7 @@ class RPSView(discord.ui.View):
         if self.message:
             try:
                 await self.message.edit(
-                    content="Time's up! The Rock-Paper-Scissors game has ended due to inactivity.",
+                    content="Time's up. Nobody picked, so the game is off.",
                     view=self,
                 )
             except discord.HTTPException:

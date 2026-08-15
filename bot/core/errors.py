@@ -18,34 +18,32 @@ def setup_error_handlers(bot):
         if isinstance(error, (BlockedUser, ChannelDisabled)):
             return  # silently ignore blocked users and disabled channels
         if isinstance(error, commands.CommandNotFound):
-            await ctx.send(
-                f"That command does not exist. Use `{config.COMMAND_PREFIX}help` to see the list of commands."
-            )
+            await ctx.send(f"I don't have that command. Try `{config.COMMAND_PREFIX}help` for the full list.")
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"Missing argument! Use `{config.COMMAND_PREFIX}help {ctx.command}` to see usage.")
+            await ctx.send(f"That command needs a bit more. See `{config.COMMAND_PREFIX}help {ctx.command}`.")
         elif isinstance(error, commands.BadArgument):
-            await ctx.send(f"Invalid argument! Use `{config.COMMAND_PREFIX}help {ctx.command}` to see usage.")
+            await ctx.send(f"I couldn't read that input. See `{config.COMMAND_PREFIX}help {ctx.command}`.")
         elif isinstance(error, commands.NoPrivateMessage):
-            await ctx.send("This command cannot be used in private messages.")
+            await ctx.send("This one only works in a server, not in DMs.")
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(f"This command is on cooldown. Try again in {error.retry_after:.1f}s.")
+            await ctx.send(f"Hold on a sec. Try again in {error.retry_after:.1f}s.")
         elif isinstance(error, commands.CheckFailure):
-            await ctx.send("You do not have permission to use this command.")
+            await ctx.send("You can't use that one.")
         else:
             log.exception("Unhandled prefix command error in %r", ctx.command, exc_info=error)
-            await ctx.send("An unexpected error occurred while processing the command.")
+            await ctx.send("Something broke on my end. Give it another go in a moment.")
 
     @bot.tree.error
     async def on_app_command_error(interaction, error):
         send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
 
         if isinstance(error, app_commands.CommandOnCooldown):
-            await send(f"This command is on cooldown. Try again in {error.retry_after:.1f}s.", ephemeral=True)
+            await send(f"Hold on a sec. Try again in {error.retry_after:.1f}s.", ephemeral=True)
         elif isinstance(error, app_commands.CheckFailure):
-            await send("You can't use this command right now.", ephemeral=True)
+            await send("You can't use that one right now.", ephemeral=True)
         else:
             log.exception("Unhandled app command error", exc_info=error)
             try:
-                await send("An unexpected error occurred while processing the command.", ephemeral=True)
+                await send("Something broke on my end. Give it another go in a moment.", ephemeral=True)
             except discord.HTTPException:
                 pass
