@@ -41,6 +41,7 @@ EXTENSIONS = [
     "bot.cogs.emojiguess",
     "bot.cogs.unscramble",
     "bot.cogs.guessnumber",
+    "bot.cogs.bombparty",
     "bot.cogs.economy",
     "bot.cogs.rps",
     "bot.cogs.tictactoe",

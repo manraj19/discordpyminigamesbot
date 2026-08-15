@@ -120,6 +120,7 @@ class Utility(commands.Cog):
             "emojiguess",
             "mathematics",
             "unscramble",
+            "bombparty",
         ],
         scope: Literal["global", "server"] = "global",
     ):

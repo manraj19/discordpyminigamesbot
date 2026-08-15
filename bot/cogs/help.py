@@ -25,6 +25,7 @@ CATEGORIES = {
         "emojiguess",
         "unscramble",
         "guessnumber",
+        "bombparty",
     ],
     "Cricket": ["simulate", "playcricket"],
     "Gambling": ["blackjack", "coinflip", "slots"],
@@ -177,6 +178,15 @@ COMMANDS = {
         "aliases": ["gn", "higherlower"],
         "usage": f"{PREFIX}guessnumber",
         "instructions": "I'll say higher or lower after each guess until you find it.",
+    },
+    "bombparty": {
+        "desc": "Pass a lit bomb around and type words for 2 to 6 players.",
+        "aliases": ["bomb", "bp"],
+        "usage": f"{PREFIX}bombparty",
+        "instructions": "Anyone in the channel can hit Join. On your turn, type any word containing the letters "
+        "shown. Wrong guesses don't buy you more time, and the clock gets shorter every round. Everyone gets "
+        "2 lives and the last one standing wins. Use every letter of the alphabet across your words to win a "
+        "life back.",
     },
     "simulate": {
         "desc": "Simulate a game of cricket.",

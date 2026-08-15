@@ -27,6 +27,7 @@ SUPPORTED_GAMES = [
     "emojiguess",
     "mathematics",
     "unscramble",
+    "bombparty",
     # guessnumber is deliberately omitted: its results are still written to
     # scores.db (so players count as registered users), but it stays off
     # leaderboards and profiles.
