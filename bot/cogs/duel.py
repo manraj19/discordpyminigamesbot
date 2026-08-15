@@ -49,6 +49,9 @@ ARENA_TITLE_FLOORS = {10: "towerbreaker", 25: "ascendant"}  # floor -> granted t
 class Duel(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # A tower run outlasts the command cooldown, so without this a player can
+        # have two fights going on the same floor and clear it twice.
+        self.in_arena = set()
 
     # --- shared helpers ---
     def _fighter(self, member, name=None):
@@ -164,6 +167,9 @@ class Duel(commands.Cog):
         )
 
     async def _arena(self, channel, member):
+        if member.id in self.in_arena:
+            await channel.send("You're already in the arena. Finish that fight first.")
+            return
         human, rec = self._fighter(member)
         floor = rec["arena_floor"] + 1  # you always fight the next uncleared floor
         allowed, left = self.bot.duel.use_arena_attempt(member.id, ARENA_DAILY_CAP)
@@ -172,6 +178,7 @@ class Duel(commands.Cog):
                 f"You're out of arena attempts for today ({ARENA_DAILY_CAP} per day). They refresh at UTC midnight."
             )
             return
+        self.in_arena.add(member.id)
         name, ai_stats, kit, is_boss = arena_opponent(floor, rec["level"])
         label = f"🤖 {name}"
         ai_fighter = make_combatant(label, ai_stats, kit)
@@ -179,6 +186,12 @@ class Duel(commands.Cog):
         state = new_duel(human, ai_fighter, 0)  # human moves first vs the bot
 
         async def on_end(widx):
+            try:
+                await settle(widx)
+            finally:
+                self.in_arena.discard(member.id)
+
+        async def settle(widx):
             if widx == 0:
                 coins = arena_reward(floor, is_boss)
                 self.bot.economy.add_coins(member.id, str(member), coins)
@@ -212,12 +225,18 @@ class Duel(commands.Cog):
                 note = f"{left} attempts left today." if left else "That was your last attempt for today."
                 await channel.send(f"💀 {name} holds floor {floor} against {member.mention}. {note}")
 
-        await channel.send(embed=rules_embed())
-        boss_tag = " · **BOSS**" if is_boss else ""
-        await channel.send(f"🗼 **Arena floor {floor}**{boss_tag} · vs {label} · {left} attempts left after this one.")
-        view = DuelView([member, ai_user], state, on_end=on_end, ai_index=1)
-        view.render_turn()
-        view.message = await channel.send(embed=view.embed(), view=view)
+        try:
+            await channel.send(embed=rules_embed())
+            boss_tag = " · **BOSS**" if is_boss else ""
+            await channel.send(
+                f"🗼 **Arena floor {floor}**{boss_tag} · vs {label} · {left} attempts left after this one."
+            )
+            view = DuelView([member, ai_user], state, on_end=on_end, ai_index=1)
+            view.render_turn()
+            view.message = await channel.send(embed=view.embed(), view=view)
+        except Exception:  # never strand the player behind the guard
+            self.in_arena.discard(member.id)
+            raise
 
     # --- embeds ---
     @staticmethod
