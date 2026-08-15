@@ -184,8 +184,45 @@ class Utility(commands.Cog):
         embed.add_field(name="Invite Link", value=f"[Invite the Bot]({config.INVITE_URL})", inline=False)
         embed.add_field(name="Support Server", value=f"[Join Support Server]({config.SUPPORT_SERVER})", inline=False)
         embed.add_field(name="Top.gg Page", value=f"[Vote for the Bot]({config.TOPGG_VOTE})", inline=False)
+        embed.add_field(
+            name="Support",
+            value=f"[Buy me a coffee]({config.KOFI_URL}) if you feel like it. The bot stays free either way, "
+            f"see `{config.COMMAND_PREFIX}donate`.",
+            inline=False,
+        )
         embed.set_footer(text=f"Uptime: {uptime_str}")
         return embed
+
+    # --- donate ---
+    def _donate_embed(self):
+        prefix = config.COMMAND_PREFIX
+        embed = embeds.branded(
+            title="☕ Support MiniGames",
+            description=(
+                "MiniGames is free, and it stays that way. Every game, every command, and anything I add later: "
+                "no paywalls, no premium tier, nothing locked behind money.\n\n"
+                "If you've had fun with it and want to help cover the hosting, there's a Ko-fi below. It gets you "
+                "a supporter role in the support server. That's the whole list. No bonus MiniCoins, no exclusive "
+                "games, no edge over anyone else, because that would make the bot worse for everyone who doesn't pay."
+            ),
+        )
+        embed.add_field(name="Ko-fi", value=f"[ko-fi.com/manraj1]({config.KOFI_URL})", inline=False)
+        embed.add_field(
+            name="Free ways to help",
+            value=f"`{prefix}vote` every 12 hours, or [invite the bot]({config.INVITE_URL}) somewhere new. "
+            "Telling a friend works too.",
+            inline=False,
+        )
+        embed.set_footer(text="Skipping this costs you nothing. Playing is support too.")
+        return embed
+
+    @commands.command(aliases=["support", "kofi"])
+    async def donate(self, ctx):
+        await ctx.send(embed=self._donate_embed())
+
+    @app_commands.command(name="donate", description="Support the bot (entirely optional, nothing gets unlocked)")
+    async def donate_slash(self, interaction: discord.Interaction):
+        await interaction.response.send_message(embed=self._donate_embed())
 
     @commands.command(aliases=["info", "bot"])
     async def botinfo(self, ctx):

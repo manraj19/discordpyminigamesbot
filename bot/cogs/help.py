@@ -43,7 +43,7 @@ CATEGORIES = {
         "duelrank",
     ],
     "Economy & Quests": ["daily", "quests", "balance", "shop", "buy", "richest", "achievements", "vote"],
-    "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo"],
+    "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo", "donate"],
 }
 
 # Per-command help. "aliases" and "instructions" are optional.
@@ -261,6 +261,13 @@ COMMANDS = {
         "usage": f"{PREFIX}urbandictionary <word>",
     },
     "botinfo": {"desc": "Get information about the bot.", "aliases": ["bot", "info"], "usage": f"{PREFIX}botinfo"},
+    "donate": {
+        "desc": "Support the bot, entirely optional.",
+        "aliases": ["support", "kofi"],
+        "usage": f"{PREFIX}donate",
+        "instructions": "MiniGames is free forever. Tips are goodwill only: they unlock nothing in the bot, "
+        "they just get you a supporter role in the support server.",
+    },
 }
 
 _ALIAS_TO_NAME = {alias: name for name, info in COMMANDS.items() for alias in info.get("aliases", [])}
@@ -270,7 +277,8 @@ def _overview_embed(bot):
     embed = embeds.branded(
         title="Help",
         description=f"Use `{PREFIX}help <command>` for more info on a command.\n"
-        f"[Support Server]({config.SUPPORT_SERVER}) | [Top.gg Vote]({config.TOPGG_VOTE})",
+        f"[Support Server]({config.SUPPORT_SERVER}) | [Top.gg Vote]({config.TOPGG_VOTE}) | "
+        f"[Ko-fi]({config.KOFI_URL})",
     )
     for category, names in CATEGORIES.items():
         embed.add_field(name=category, value=", ".join(f"`{n}`" for n in names), inline=False)

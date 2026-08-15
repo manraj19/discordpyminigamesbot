@@ -35,6 +35,9 @@ SUCCESS_COLOR = 0x2ECC71
 FOOTER_TEXT = "Developed by fzng (fang)."
 SUPPORT_SERVER = "https://discord.gg/3UpnJhjkKZ"
 TOPGG_VOTE = f"https://top.gg/bot/{BOT_ID}/vote"
+# Tips are goodwill only. They never unlock features, so this link stays out of
+# gameplay and lives on the "about the bot" surfaces where people go looking.
+KOFI_URL = "https://ko-fi.com/manraj1"
 INVITE_URL = (
     f"https://discord.com/oauth2/authorize?client_id={BOT_ID}&permissions=563914173967424&integration_type=0&scope=bot"
 )
