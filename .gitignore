@@ -19,6 +19,11 @@ dist/
 # Databases (keep live data out of version control; back up separately)
 *.db
 *.db.bak
+# SQLite WAL sidecars. The running bot rewrites these constantly, so tracking
+# them makes every deploy's `git pull` abort on local changes.
+*.db-shm
+*.db-wal
+*.db-journal
 *.sqlite
 *.sqlite3
 

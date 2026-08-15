@@ -17,7 +17,11 @@ jobs:
           username: ${{ secrets.DROPLET_USER }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
+            set -euo pipefail
             cd ~/minigames-bot
             git pull --ff-only
             .venv/bin/pip install -q -r requirements.txt
             sudo /usr/bin/systemctl restart minigames-bot
+            sleep 5
+            systemctl is-active --quiet minigames-bot
+            git log -1 --oneline
