@@ -63,6 +63,11 @@ class MiniGamesBot(commands.AutoShardedBot):
             intents=intents,
             help_command=None,
             tree_cls=BlocklistCommandTree,
+            # Commands echo user input back (";8ball @everyone ...", cricket team
+            # names), so without this the bot is a mass ping button in any server
+            # that granted it Mention Everyone. User mentions stay on: duels and
+            # bomb party build those from Member objects, not from typed text.
+            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
         )
         # Shared services (not bot.http - that name is taken by discord.py).
         self.scores = ScoreService()
