@@ -18,6 +18,7 @@ dist/
 
 # Databases (keep live data out of version control; back up separately)
 *.db
+*.db.bak
 *.sqlite
 *.sqlite3
 
