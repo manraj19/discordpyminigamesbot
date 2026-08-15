@@ -162,6 +162,7 @@ class Utility(commands.Cog):
         return embed
 
     @commands.command()
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def profile(self, ctx):
         await ctx.send(embed=self._profile(ctx.author))
 

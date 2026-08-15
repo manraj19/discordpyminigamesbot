@@ -415,6 +415,7 @@ class Duel(commands.Cog):
 
     # --- management commands (prefix only) ---
     @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def buygear(self, ctx, item: str):
         item = item.lower()
         if item not in GEAR:
@@ -431,6 +432,7 @@ class Duel(commands.Cog):
         await ctx.send(f"Bought **{GEAR[item]['name']}**! Equip it with `;equip {item}`.")
 
     @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def buyability(self, ctx, ability: str):
         ability = ability.lower()
         ab = ABILITIES.get(ability)
@@ -448,6 +450,7 @@ class Duel(commands.Cog):
         await ctx.send(f"Unlocked **{ab.name}**! Add it to your kit with `;loadout`.")
 
     @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def enhance(self, ctx, item: str):
         item = item.lower()
         if item not in GEAR:
@@ -477,6 +480,7 @@ class Duel(commands.Cog):
         await ctx.send(msg)
 
     @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def equip(self, ctx, item: str):
         result = self.bot.duel.equip(ctx.author.id, item.lower())
         if result == "equipped":

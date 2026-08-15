@@ -163,6 +163,7 @@ class Economy(commands.Cog):
         await interaction.response.send_message(embed=self._shop_embed(interaction.user))
 
     @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def buy(self, ctx, item: str):
         await ctx.send(self._buy(ctx.author, item.lower()))
 
@@ -203,6 +204,7 @@ class Economy(commands.Cog):
         )
 
     @commands.command(aliases=["achs"])
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def achievements(self, ctx, member: discord.Member = None):
         await ctx.send(embed=self._achievements_embed(member or ctx.author))
 

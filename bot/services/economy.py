@@ -140,7 +140,16 @@ class EconomyService:
         self._conn.commit()
 
     def spend(self, user_id, amount):
-        """Deduct ``amount`` if the user can afford it. Returns True on success."""
+        """Deduct ``amount`` if the user can afford it. Returns True on success.
+
+        SECURITY: this reads the balance and then writes it, which is only safe
+        because the method is synchronous and never awaits. On one event loop
+        nothing can run between the check and the deduction. If this is ever made
+        async (the aiosqlite migration noted in scores.py), two concurrent buys
+        could both pass the affordability check and overdraw the account. Move
+        the whole thing into a single guarded statement first, for example
+        ``UPDATE ... SET coins = coins - ? WHERE user_id = ? AND coins >= ?``
+        and treat rowcount 0 as "could not afford"."""
         row = self._conn.execute("SELECT coins FROM economy WHERE user_id = ?", (user_id,)).fetchone()
         if row is None or row[0] < amount:
             return False
