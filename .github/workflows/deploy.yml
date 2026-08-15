@@ -19,7 +19,12 @@ jobs:
           script: |
             set -euo pipefail
             cd ~/minigames-bot
-            git pull --ff-only
+            # Reset rather than pull: the droplet is a deploy target that holds no
+            # local commits, and --ff-only cannot cross a force-push, which left
+            # deploys failing after a history rewrite. Ignored files (scores.db and
+            # its sidecars) are untouched by reset --hard.
+            git fetch --prune origin
+            git reset --hard origin/main
             .venv/bin/pip install -q -r requirements.txt
             sudo /usr/bin/systemctl restart minigames-bot
             sleep 5
