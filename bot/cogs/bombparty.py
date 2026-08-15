@@ -5,10 +5,11 @@ messages.
 Each turn starts a fresh clock (see ``turn_seconds``), so nobody can stall and
 hand over a bomb that is about to go off.
 
-The whole game runs out of one board message that gets edited: results and
-explosions are written into it rather than posted, and each turn's guesses are
-swept in a single bulk delete. Without that, a six player game buries the
-channel under hundreds of one word messages.
+The board holds the game state and is edited once a turn. Each turn also posts
+one short ping, which is what actually notifies the player on the clock (editing
+a message never re-notifies anyone) and which carries the live countdown. That
+ping and every guess made during the turn are cleared in a single bulk delete
+once the turn resolves, so the channel keeps just the board.
 """
 
 import asyncio
@@ -22,6 +23,7 @@ from discord.ext import commands
 
 from bot.core import emojis
 from bot.core.rewards import RewardResult
+from bot.core.utils import run_countdown
 from bot.games.bombparty import (
     MIN_PLAYERS,
     accept,
@@ -38,7 +40,6 @@ from bot.games.bombparty import (
 from bot.views.bombparty import LobbyView
 
 GAME = "bombparty"
-WARN_SECONDS = 5  # when the board flips to its "nearly out of time" state
 
 # Why a guess bounced. The clock keeps running either way, which is the point.
 VERDICT_REACTION = {"no_prompt": "❌", "not_a_word": "❓", "used": "♻️"}
@@ -79,17 +80,21 @@ class BombParty(commands.Cog):
         by_id = {player.id: player for player in players}
         game.prompt = sample_prompt(rng, game.round)
         status = "Type a word containing the letters below."
-        board = await channel.send(embed=self._board(game, by_id, turn_seconds(game.round), status))
+        board = await channel.send(embed=self._board(game, by_id, status))
 
         while True:
             holder = by_id[current_player(game)]
             allowance = turn_seconds(game.round)
-            warn = asyncio.create_task(self._warn(board, game, by_id, allowance, status))
+            # A fresh message per turn, so the player on the clock actually gets
+            # notified. It carries the live countdown and is swept with the turn.
+            note = f"{holder.mention} you're up! Find a word with **{game.prompt.upper()}** in it."
+            ping = await channel.send(f"{note}  ⏳ **{allowance}s**")
+            ticker = asyncio.create_task(run_countdown(ping, allowance, note))
             try:
                 word, attempts = await self._await_word(channel, holder, game, time.time() + allowance)
             finally:
-                warn.cancel()
-            await self._sweep(channel, attempts)
+                ticker.cancel()
+            await self._sweep(channel, [ping, *attempts])
 
             if word is None:
                 out = explode(game)
@@ -107,21 +112,11 @@ class BombParty(commands.Cog):
             advance(game)
             game.prompt = sample_prompt(rng, game.round)
             with contextlib.suppress(discord.HTTPException):
-                await board.edit(embed=self._board(game, by_id, turn_seconds(game.round), status))
+                await board.edit(embed=self._board(game, by_id, status))
 
         with contextlib.suppress(discord.HTTPException):
             await board.edit(embed=self._final_board(game, by_id))
         await self._finish(channel, game, by_id)
-
-    async def _warn(self, board, game, by_id, allowance, status):
-        """Flip the board to a warning when the turn is nearly up, then stop.
-
-        Discord's relative timestamps render inconsistently and trust the
-        viewer's clock, so the countdown is drawn bot side. One edit near the end
-        gives the urgency spike without ticking every second all game."""
-        await asyncio.sleep(max(0, allowance - WARN_SECONDS))
-        with contextlib.suppress(discord.HTTPException):
-            await board.edit(embed=self._board(game, by_id, WARN_SECONDS, status, warning=True))
 
     async def _sweep(self, channel, messages):
         """Delete the turn's guesses in one call so the board stays the only
@@ -157,7 +152,9 @@ class BombParty(commands.Cog):
             with contextlib.suppress(discord.HTTPException):
                 await message.add_reaction(VERDICT_REACTION[verdict])
 
-    def _board(self, game, by_id, seconds, status, warning=False):
+    def _board(self, game, by_id, status):
+        """The persistent game state. The countdown lives on the per turn ping
+        below it, so this only redraws once a turn."""
         rows = []
         for pid in game.players:
             lives = game.lives[pid]
@@ -165,13 +162,10 @@ class BombParty(commands.Cog):
             marker = "➡️ " if pid == current_player(game) else ""
             rows.append(f"{marker}{by_id[pid].display_name}  {hearts}")
         holder = by_id[current_player(game)]
-        clock = f"⏳ **{seconds}s left!**" if warning else f"⏳ **{seconds}s**"
         embed = discord.Embed(
             title="💣 Bomb Party",
-            description=(
-                f"{status}\n# {game.prompt.upper()}\n{holder.mention}, type a word with those letters in it.\n{clock}"
-            ),
-            color=discord.Color.red() if warning else discord.Color.orange(),
+            description=f"{status}\n# {game.prompt.upper()}\n{holder.display_name} is up.",
+            color=discord.Color.orange(),
         )
         embed.add_field(name="Players", value="\n".join(rows))
         embed.set_footer(text=f"Round {game.round} · wrong guesses don't buy you more time")
