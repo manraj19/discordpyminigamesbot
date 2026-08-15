@@ -25,7 +25,8 @@ class LobbyView(discord.ui.View):
             title="💣 Bomb Party",
             description=(
                 f"Type a word containing the letters shown before the bomb goes off. Everyone starts with "
-                f"**{STARTING_LIVES}** lives and the last one standing wins.\n\n"
+                f"**{STARTING_LIVES}** lives and the last one standing wins. Guesses get tidied up as you go, "
+                f"so the game stays in one message.\n\n"
                 f"Hit **Join** to play. {MAX_PLAYERS} players max, starting in {LOBBY_SECONDS} seconds."
             ),
             color=discord.Color.orange(),

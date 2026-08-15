@@ -3,9 +3,12 @@ shown letters. Rules live in bot.games.bombparty; this owns the clock and the
 messages.
 
 Each turn starts a fresh clock (see ``turn_seconds``), so nobody can stall and
-hand over a bomb that is about to go off. The countdown is a Discord relative
-timestamp, which the client ticks down on its own, so a long game costs one edit
-per turn.
+hand over a bomb that is about to go off.
+
+The whole game runs out of one board message that gets edited: results and
+explosions are written into it rather than posted, and each turn's guesses are
+swept in a single bulk delete. Without that, a six player game buries the
+channel under hundreds of one word messages.
 """
 
 import asyncio
@@ -35,6 +38,7 @@ from bot.games.bombparty import (
 from bot.views.bombparty import LobbyView
 
 GAME = "bombparty"
+WARN_SECONDS = 5  # when the board flips to its "nearly out of time" state
 
 # Why a guess bounced. The clock keeps running either way, which is the point.
 VERDICT_REACTION = {"no_prompt": "❌", "not_a_word": "❓", "used": "♻️"}
@@ -74,36 +78,65 @@ class BombParty(commands.Cog):
         game = new_game([player.id for player in players])
         by_id = {player.id: player for player in players}
         game.prompt = sample_prompt(rng, game.round)
-        deadline = time.time() + turn_seconds(game.round)
-        board = await channel.send(embed=self._board(game, by_id, deadline))
+        status = "Type a word containing the letters below."
+        board = await channel.send(embed=self._board(game, by_id, turn_seconds(game.round), status))
 
         while True:
             holder = by_id[current_player(game)]
-            word = await self._await_word(channel, holder, game, deadline)
+            allowance = turn_seconds(game.round)
+            warn = asyncio.create_task(self._warn(board, game, by_id, allowance, status))
+            try:
+                word, attempts = await self._await_word(channel, holder, game, time.time() + allowance)
+            finally:
+                warn.cancel()
+            await self._sweep(channel, attempts)
+
             if word is None:
-                knocked_out = explode(game)
-                if knocked_out:
-                    await channel.send(f"💥 The bomb goes off. {holder.mention} is out!")
-                else:
-                    left = game.lives[holder.id]
-                    await channel.send(f"💥 Boom. {holder.mention} loses a life, **{left}** to go.")
-            elif accept(game, word):
-                await channel.send(f"🔤 {holder.mention} used the whole alphabet and takes a life back!")
+                out = explode(game)
+                status = (
+                    f"💥 The bomb went off. **{holder.display_name}** is out."
+                    if out
+                    else f"💥 Boom. **{holder.display_name}** is down to {game.lives[holder.id]}."
+                )
+            else:
+                status = f"✅ **{holder.display_name}** played **{word}**."
+                if accept(game, word):
+                    status += " Whole alphabet, life back!"
             if winner(game) is not None:
                 break
             advance(game)
             game.prompt = sample_prompt(rng, game.round)
-            deadline = time.time() + turn_seconds(game.round)  # every turn starts clean
             with contextlib.suppress(discord.HTTPException):
-                await board.edit(embed=self._board(game, by_id, deadline))
+                await board.edit(embed=self._board(game, by_id, turn_seconds(game.round), status))
 
         with contextlib.suppress(discord.HTTPException):
-            await board.edit(embed=self._final_board(game, by_id))  # no stale countdown left behind
+            await board.edit(embed=self._final_board(game, by_id))
         await self._finish(channel, game, by_id)
 
+    async def _warn(self, board, game, by_id, allowance, status):
+        """Flip the board to a warning when the turn is nearly up, then stop.
+
+        Discord's relative timestamps render inconsistently and trust the
+        viewer's clock, so the countdown is drawn bot side. One edit near the end
+        gives the urgency spike without ticking every second all game."""
+        await asyncio.sleep(max(0, allowance - WARN_SECONDS))
+        with contextlib.suppress(discord.HTTPException):
+            await board.edit(embed=self._board(game, by_id, WARN_SECONDS, status, warning=True))
+
+    async def _sweep(self, channel, messages):
+        """Delete the turn's guesses in one call so the board stays the only
+        thing in the channel. Needs Manage Messages; without it this quietly
+        does nothing and the guesses just stay put."""
+        if not messages:
+            return
+        with contextlib.suppress(discord.HTTPException, AttributeError):
+            await channel.delete_messages(messages)
+
     async def _await_word(self, channel, player, game, deadline):
-        """Wait for the holder to type something valid. Returns the word, or None
-        if the fuse ran out. Wrong guesses cost time, not a fresh timer."""
+        """Wait for the holder to type something valid. Returns ``(word, tried)``
+        with word None if they ran out of time, and every message they sent so
+        the caller can clear them. Wrong guesses cost time, not a fresh timer."""
+        tried = []
 
         def check(message):
             return message.channel == channel and message.author.id == player.id
@@ -111,19 +144,20 @@ class BombParty(commands.Cog):
         while True:
             remaining = deadline - time.time()
             if remaining <= 0:
-                return None
+                return None, tried
             try:
                 message = await self.bot.wait_for("message", check=check, timeout=remaining)
             except asyncio.TimeoutError:
-                return None
+                return None, tried
+            tried.append(message)
             word = normalize(message.content)
             verdict = judge(game, word)
             if verdict == "ok":
-                return word
+                return word, tried
             with contextlib.suppress(discord.HTTPException):
                 await message.add_reaction(VERDICT_REACTION[verdict])
 
-    def _board(self, game, by_id, deadline):
+    def _board(self, game, by_id, seconds, status, warning=False):
         rows = []
         for pid in game.players:
             lives = game.lives[pid]
@@ -131,14 +165,13 @@ class BombParty(commands.Cog):
             marker = "➡️ " if pid == current_player(game) else ""
             rows.append(f"{marker}{by_id[pid].display_name}  {hearts}")
         holder = by_id[current_player(game)]
+        clock = f"⏳ **{seconds}s left!**" if warning else f"⏳ **{seconds}s**"
         embed = discord.Embed(
             title="💣 Bomb Party",
             description=(
-                f"# {game.prompt.upper()}\n"
-                f"{holder.mention}, type a word with those letters in it.\n"
-                f"🧨 It blows <t:{int(deadline)}:R>"
+                f"{status}\n# {game.prompt.upper()}\n{holder.mention}, type a word with those letters in it.\n{clock}"
             ),
-            color=discord.Color.orange(),
+            color=discord.Color.red() if warning else discord.Color.orange(),
         )
         embed.add_field(name="Players", value="\n".join(rows))
         embed.set_footer(text=f"Round {game.round} · wrong guesses don't buy you more time")
