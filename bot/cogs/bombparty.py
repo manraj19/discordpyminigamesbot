@@ -7,9 +7,10 @@ hand over a bomb that is about to go off.
 
 The board holds the game state and is edited once a turn. Each turn also posts
 one short ping, which is what actually notifies the player on the clock (editing
-a message never re-notifies anyone) and which carries the live countdown. That
-ping and every guess made during the turn are cleared in a single bulk delete
-once the turn resolves, so the channel keeps just the board.
+a message never re-notifies anyone) and which carries the live countdown. The
+ping is deleted once the turn resolves. A player's guesses stay up so others can
+see what was tried, and get cleared when that player is up again (or when the
+game ends), so the channel never piles up more than one turn per player.
 """
 
 import asyncio
@@ -81,9 +82,11 @@ class BombParty(commands.Cog):
         game.prompt = sample_prompt(rng, game.round)
         status = "Type a word containing the letters below."
         board = await channel.send(embed=self._board(game, by_id, status))
+        pending = {}  # player id -> their guesses from their last turn
 
         while True:
             holder = by_id[current_player(game)]
+            await self._sweep(channel, pending.pop(holder.id, []))
             allowance = turn_seconds(game.round)
             # A fresh message per turn, so the player on the clock actually gets
             # notified. It carries the live countdown and is swept with the turn.
@@ -94,7 +97,8 @@ class BombParty(commands.Cog):
                 word, attempts = await self._await_word(channel, holder, game, time.time() + allowance)
             finally:
                 ticker.cancel()
-            await self._sweep(channel, [ping, *attempts])
+            await self._sweep(channel, [ping])
+            pending[holder.id] = attempts
 
             if word is None:
                 out = explode(game)
@@ -116,12 +120,15 @@ class BombParty(commands.Cog):
 
         with contextlib.suppress(discord.HTTPException):
             await board.edit(embed=self._final_board(game, by_id))
+        # One call per player keeps each delete within a single turn's worth.
+        for leftover in pending.values():
+            await self._sweep(channel, leftover)
         await self._finish(channel, game, by_id)
 
     async def _sweep(self, channel, messages):
-        """Delete the turn's guesses in one call so the board stays the only
-        thing in the channel. Needs Manage Messages; without it this quietly
-        does nothing and the guesses just stay put."""
+        """Delete a batch of turn messages in one call. Needs Manage Messages
+        for other people's messages; without it this quietly does nothing and
+        the guesses just stay put."""
         if not messages:
             return
         with contextlib.suppress(discord.HTTPException, AttributeError):
