@@ -51,6 +51,9 @@ class Race(commands.Cog):
                 return message.author
 
     async def _play(self, channel, player1, player2):
+        await self.bot.play(channel, [player1, player2], lambda: self._run(channel, player1, player2))
+
+    async def _run(self, channel, player1, player2):
         intro = discord.Embed(
             title="🏁 Race",
             description=(

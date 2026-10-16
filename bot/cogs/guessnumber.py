@@ -17,13 +17,7 @@ class GuessNumber(commands.Cog):
         self.bot = bot
 
     async def _play(self, channel, player):
-        if not self.bot.begin_session(player.id):
-            await channel.send("⚠️ Finish your current game first.")
-            return
-        try:
-            await self._run(channel, player)
-        finally:
-            self.bot.end_session(player.id)
+        await self.bot.play(channel, [player], lambda: self._run(channel, player))
 
     async def _run(self, channel, player):
         secret = random.randint(LOW, HIGH)
@@ -34,9 +28,7 @@ class GuessNumber(commands.Cog):
             try:
                 msg = await self.bot.wait_for(
                     "message",
-                    check=lambda m: (
-                        m.author == player and m.channel == channel and m.content.strip().lstrip("-").isdigit()
-                    ),
+                    check=lambda m: m.author == player and m.channel == channel and m.content.strip().isdecimal(),
                     timeout=GUESS_TIMEOUT,
                 )
             except asyncio.TimeoutError:

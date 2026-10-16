@@ -18,13 +18,7 @@ class Flagle(commands.Cog):
         self.bot = bot
 
     async def _play(self, message, author, channel, send_text):
-        if not self.bot.begin_session(author.id):
-            await channel.send("⚠️ Finish your current game first.")
-            return
-        try:
-            await self._run(message, author, channel, send_text)
-        finally:
-            self.bot.end_session(author.id)
+        await self.bot.play(channel, [author], lambda: self._run(message, author, channel, send_text))
 
     async def _run(self, message, author, channel, send_text):
         score = 0

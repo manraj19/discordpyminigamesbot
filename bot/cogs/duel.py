@@ -61,15 +61,13 @@ class Duel(commands.Cog):
         return make_combatant(name or member.display_name, stats, rec["loadout"]), rec
 
     async def _settle(self, channel, players, records, mode, bet, widx):
-        if widx is None or widx == "draw":  # no decisive result: AFK timeout or turn-cap draw
-            if mode == "casual" and bet:
+        if widx == "draw":  # the turn cap hit with nobody ahead
+            refund = mode == "casual" and bet
+            if refund:
                 for player in players:
                     self.bot.economy.add_coins(player.id, str(player), bet)
-            refund = f" The {bet}-MiniCoin wagers were refunded." if (mode == "casual" and bet) else ""
-            if widx == "draw":
-                await channel.send(f"🤝 The duel hit the turn limit and ended in a draw.{refund}")
-            elif refund:
-                await channel.send(f"⌛ Duel expired.{refund}")
+            note = f" The {bet}-MiniCoin wagers were refunded." if refund else ""
+            await channel.send(f"🤝 The duel hit the turn limit and ended in a draw.{note}")
             return
         winner, loser = players[widx], players[1 - widx]
         if mode == "ranked":
@@ -86,40 +84,26 @@ class Duel(commands.Cog):
             loss_level = self.bot.duel.apply_match(
                 loser.id, str(loser), False, RANKED_LOSS_XP, new_rating=new_l, ranked=True
             )
-            level_up, bonus = self.bot.apply_level_up(winner.id, str(winner), win_level)
-            self.bot.apply_level_up(loser.id, str(loser), loss_level)
-            new = self.bot.award_achievements(winner.id, str(winner))
-            quests, q_level, q_bonus = self.bot.quest_event(winner.id, str(winner), "duel_win", 1)
             msg = (
                 f"{emojis.TROPHY} {winner.mention} wins ranked! Rating **{wr}→{new_w}** "
                 f"(+{RANKED_TROPHIES} {emojis.TROPHY}) · {loser.mention} **{lr}→{new_l}**"
             )
-            extra = RewardResult(
-                coins=bonus + q_bonus, level_up=q_level or level_up, new_achievements=new, quests=quests
-            ).line()
-            if extra:
-                msg += f"\n{extra}"
-            await channel.send(msg)
-            return
-        if bet:
-            self.bot.economy.add_coins(winner.id, str(winner), bet * 2)
-            note = f"takes the **{bet * 2}**-MiniCoin pot {emojis.COIN}"
         else:
-            self.bot.economy.add_coins(winner.id, str(winner), CASUAL_WIN_COINS)
-            note = f"earns **{CASUAL_WIN_COINS}** MiniCoins {emojis.COIN}"
-        win_level = self.bot.duel.apply_match(winner.id, str(winner), True, CASUAL_WIN_XP)
-        loss_level = self.bot.duel.apply_match(loser.id, str(loser), False, CASUAL_LOSS_XP)
+            prize = bet * 2 if bet else CASUAL_WIN_COINS
+            self.bot.economy.add_coins(winner.id, str(winner), prize)
+            note = f"takes the **{prize}**-MiniCoin pot" if bet else f"earns **{prize}** MiniCoins"
+            win_level = self.bot.duel.apply_match(winner.id, str(winner), True, CASUAL_WIN_XP)
+            loss_level = self.bot.duel.apply_match(loser.id, str(loser), False, CASUAL_LOSS_XP)
+            msg = f"{emojis.TROPHY} {winner.mention} {note} {emojis.COIN}"
+
         level_up, bonus = self.bot.apply_level_up(winner.id, str(winner), win_level)
         self.bot.apply_level_up(loser.id, str(loser), loss_level)
         new = self.bot.award_achievements(winner.id, str(winner))
         quests, q_level, q_bonus = self.bot.quest_event(winner.id, str(winner), "duel_win", 1)
-        msg = f"{emojis.TROPHY} {winner.mention} {note}"
         extra = RewardResult(
             coins=bonus + q_bonus, level_up=q_level or level_up, new_achievements=new, quests=quests
         ).line()
-        if extra:
-            msg += f"\n{extra}"
-        await channel.send(msg)
+        await channel.send(f"{msg}\n{extra}" if extra else msg)
 
     async def _begin(self, channel, p0, p1, mode, bet):
         c0, r0 = self._fighter(p0)

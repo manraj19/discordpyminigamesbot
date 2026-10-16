@@ -2,6 +2,8 @@
 rules to ``bot.games.tictactoe.TicTacToeGame``. Scoring is injected via an
 ``on_win`` coroutine so the view stays decoupled from persistence."""
 
+import contextlib
+
 import discord
 
 from bot.games.tictactoe import TicTacToeGame
@@ -32,9 +34,8 @@ class TicTacToeButton(discord.ui.Button):
 
         if view.game.winner() is not None:
             view.disable_all()
-            result = await view.on_win(interaction.user) if view.on_win is not None else None
-            note = f"  ·  {result.line()}" if result and result.line() else ""
-            text = f"{interaction.user.mention} wins! 🎉{note}"
+            line = (await view.on_win(interaction.user)).line()
+            text = f"{interaction.user.mention} wins! 🎉" + (f"  ·  {line}" if line else "")
             await view.message.edit(content=text, view=view)
             view.stop()
             return
@@ -50,21 +51,23 @@ class TicTacToeButton(discord.ui.Button):
 
 
 class TicTacToeView(discord.ui.View):
-    def __init__(self, player1, player2, *, on_win=None):
+    def __init__(self, player1, player2, *, on_win):
         super().__init__(timeout=30.0)
         self.player1 = player1
         self.player2 = player2
         self.current_player = player1
         self.game = TicTacToeGame()
         self.message = None
-        self.on_win = on_win  # async callable(member) | None
+        self.on_win = on_win  # async callable(member) -> RewardResult
         for row in range(3):
             for col in range(3):
                 self.add_item(TicTacToeButton(row, col))
 
-    @property
-    def current_symbol(self):
-        return self.game.current_symbol
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id in (self.player1.id, self.player2.id):
+            return True
+        await interaction.response.send_message("This game isn't yours.", ephemeral=True)
+        return False
 
     def switch_player(self):
         self.current_player = self.player2 if self.current_player == self.player1 else self.player1
@@ -75,9 +78,9 @@ class TicTacToeView(discord.ui.View):
             item.disabled = True
 
     async def on_timeout(self):
+        self.disable_all()
         if self.message:
-            try:
-                await self.message.channel.send("Time's up. Nobody moved, so I've called it there.")
-            except discord.HTTPException:
-                pass
-        self.stop()
+            with contextlib.suppress(discord.HTTPException):
+                await self.message.edit(
+                    content=f"⌛ {self.current_player.mention} didn't move in time, so the game's over.", view=self
+                )

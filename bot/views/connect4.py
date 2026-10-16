@@ -1,5 +1,7 @@
 """Connect 4 view."""
 
+import contextlib
+
 import discord
 
 from bot.games.connect4 import (
@@ -32,7 +34,7 @@ class ColumnButton(discord.ui.Button):
 
 
 class Connect4View(discord.ui.View):
-    def __init__(self, player1, player2, *, on_win=None):
+    def __init__(self, player1, player2, *, on_win):
         super().__init__(timeout=60.0)
         self.player1 = player1
         self.player2 = player2
@@ -50,7 +52,10 @@ class Connect4View(discord.ui.View):
         return _board_embed(self.board, self.current, self._piece(self.current))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return interaction.user in (self.player1, self.player2)
+        if interaction.user.id in (self.player1.id, self.player2.id):
+            return True
+        await interaction.response.send_message("This game isn't yours.", ephemeral=True)
+        return False
 
     async def play(self, interaction, col):
         if interaction.user != self.current:
@@ -64,10 +69,8 @@ class Connect4View(discord.ui.View):
         drop_piece(self.board, col, piece)
 
         if check_win(self.board, piece):
-            result = await self.on_win(self.current) if self.on_win else None
-            content = f"{self.current.mention} wins! 🎉"
-            if result and result.line():
-                content += f"  ·  {result.line()}"
+            line = (await self.on_win(self.current)).line()
+            content = f"{self.current.mention} wins! 🎉" + (f"  ·  {line}" if line else "")
             await interaction.response.edit_message(content=content, embed=self.embed(), view=None)
             self.stop()
             return
@@ -87,8 +90,9 @@ class Connect4View(discord.ui.View):
 
     async def on_timeout(self):
         if self.message:
-            try:
-                await self.message.channel.send("Time's up. Nobody moved, so the Connect 4 game is over.")
-            except discord.HTTPException:
-                pass
-        self.stop()
+            with contextlib.suppress(discord.HTTPException):
+                await self.message.edit(
+                    content=f"⌛ {self.current.mention} didn't move in time, so the game's over.",
+                    embed=self.embed(),
+                    view=None,
+                )

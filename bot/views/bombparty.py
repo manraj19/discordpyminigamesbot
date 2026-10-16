@@ -1,6 +1,8 @@
 """Bomb Party lobby: an open join window, since this is a free-for-all rather
 than a challenge aimed at one opponent."""
 
+import contextlib
+
 import discord
 
 from bot.games.bombparty import MAX_PLAYERS, MIN_PLAYERS, STARTING_LIVES
@@ -25,8 +27,8 @@ class LobbyView(discord.ui.View):
             title="💣 Bomb Party",
             description=(
                 f"Type a word containing the letters shown before the bomb goes off. Everyone starts with "
-                f"**{STARTING_LIVES}** lives and the last one standing wins. Guesses get tidied up as you go, "
-                f"so the game stays in one message.\n\n"
+                f"**{STARTING_LIVES}** lives and the last one standing wins. Your guesses stay up until your "
+                f"next turn, so everyone can see what's been tried.\n\n"
                 f"Hit **Join** to play. {MAX_PLAYERS} players max, starting in {LOBBY_SECONDS} seconds."
             ),
             color=discord.Color.orange(),
@@ -67,7 +69,5 @@ class LobbyView(discord.ui.View):
 
     async def on_timeout(self):
         if self.message:
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(embed=self.embed(), view=None)
-            except discord.HTTPException:
-                pass

@@ -3,7 +3,6 @@ cosmetic-title shop that coins are spent on."""
 
 import datetime
 import logging
-from typing import Literal
 
 import discord
 from discord import app_commands
@@ -17,7 +16,10 @@ from bot.services.economy import STREAKSHIELD_PRICE, TITLES, title_name
 
 log = logging.getLogger(__name__)
 
-BuyId = Literal["novice", "grinder", "sharpshooter", "highroller", "legend", "streakshield"]
+# The /buy dropdown, built from the shop so a new title shows up without editing it.
+BUY_CHOICES = [
+    app_commands.Choice(name=f"{name} ({price} MiniCoins)", value=item_id) for item_id, (name, price) in TITLES.items()
+] + [app_commands.Choice(name=f"Streak Shield ({STREAKSHIELD_PRICE} MiniCoins)", value="streakshield")]
 
 
 class Economy(commands.Cog):
@@ -168,7 +170,9 @@ class Economy(commands.Cog):
         await ctx.send(self._buy(ctx.author, item.lower()))
 
     @app_commands.command(name="buy", description="Buy a cosmetic title or a streak shield")
-    async def buy_slash(self, interaction: discord.Interaction, item: BuyId):
+    @app_commands.choices(item=BUY_CHOICES)
+    @app_commands.checks.cooldown(1, 3, key=lambda i: i.user.id)
+    async def buy_slash(self, interaction: discord.Interaction, item: str):
         await interaction.response.send_message(self._buy(interaction.user, item))
 
     # --- richest ---
@@ -210,6 +214,7 @@ class Economy(commands.Cog):
 
     @app_commands.command(name="achievements", description="View earned achievements")
     @app_commands.describe(member="Whose achievements to view (defaults to you)")
+    @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
     async def achievements_slash(self, interaction: discord.Interaction, member: discord.Member = None):
         await interaction.response.send_message(embed=self._achievements_embed(member or interaction.user))
 

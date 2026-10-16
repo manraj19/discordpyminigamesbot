@@ -1,5 +1,6 @@
 """Centralised error handling for both prefix and slash commands."""
 
+import contextlib
 import logging
 
 import discord
@@ -7,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import config
-from bot.core.checks import BlockedUser, ChannelDisabled
+from bot.core.checks import BlockedUser, ChannelDisabled, WrongChannel, silenced
 
 log = logging.getLogger(__name__)
 
@@ -15,10 +16,15 @@ log = logging.getLogger(__name__)
 def setup_error_handlers(bot):
     @bot.event
     async def on_command_error(ctx, error):
-        if isinstance(error, (BlockedUser, ChannelDisabled)):
-            return  # silently ignore blocked users and disabled channels
-        if isinstance(error, commands.CommandNotFound):
-            await ctx.send(f"I don't have that command. Try `{config.COMMAND_PREFIX}help` for the full list.")
+        if isinstance(error, BlockedUser) or (isinstance(error, ChannelDisabled) and not str(error)):
+            return  # stay quiet for blocked users, and for players in a channel the bot is off in
+        if isinstance(error, (ChannelDisabled, WrongChannel)):
+            await ctx.send(str(error), delete_after=10)
+        elif isinstance(error, commands.CommandNotFound):
+            if not silenced(ctx):
+                await ctx.send(f"I don't have that command. Try `{config.COMMAND_PREFIX}help` for the full list.")
+        elif isinstance(error, commands.MissingPermissions):
+            await ctx.send("Only server admins can do that.", ephemeral=True)
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.send(f"That command needs a bit more. See `{config.COMMAND_PREFIX}help {ctx.command}`.")
         elif isinstance(error, commands.BadArgument):
@@ -26,12 +32,13 @@ def setup_error_handlers(bot):
         elif isinstance(error, commands.NoPrivateMessage):
             await ctx.send("This one only works in a server, not in DMs.")
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(f"Hold on a sec. Try again in {error.retry_after:.1f}s.")
+            # ephemeral only matters when a hybrid command was run as a slash command
+            await ctx.send(f"Hold on a sec. Try again in {error.retry_after:.1f}s.", ephemeral=True)
         elif isinstance(error, commands.CheckFailure):
-            await ctx.send("You can't use that one.")
+            await ctx.send("You can't use that one.", ephemeral=True)
         else:
             log.exception("Unhandled prefix command error in %r", ctx.command, exc_info=error)
-            await ctx.send("Something broke on my end. Give it another go in a moment.")
+            await ctx.send("Something broke on my end. Give it another go in a moment.", ephemeral=True)
 
     @bot.tree.error
     async def on_app_command_error(interaction, error):
@@ -43,7 +50,5 @@ def setup_error_handlers(bot):
             await send("You can't use that one right now.", ephemeral=True)
         else:
             log.exception("Unhandled app command error", exc_info=error)
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await send("Something broke on my end. Give it another go in a moment.", ephemeral=True)
-            except discord.HTTPException:
-                pass

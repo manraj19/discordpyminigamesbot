@@ -44,9 +44,14 @@ CATEGORIES = {
     ],
     "Economy & Quests": ["daily", "quests", "balance", "shop", "buy", "richest", "achievements", "vote"],
     "Utility": ["profile", "leaderboard", "define", "urbandictionary", "botinfo", "donate"],
+    "Server Admin": ["setchannel", "unsetchannel", "disable", "enable", "gamechannels"],
 }
 
-# Per-command help. "aliases" and "instructions" are optional.
+# Commands a server admin can pin to channels with ;setchannel. Everything else
+# (help, profile, balance and the rest) keeps working in every channel.
+GAMES = frozenset(CATEGORIES["Games"] + CATEGORIES["Cricket"] + CATEGORIES["Gambling"] + ["duel", "ranked", "arena"])
+
+# Per-command help. "instructions" is optional; aliases come from the commands themselves.
 COMMANDS = {
     "dino": {
         "desc": "Play a game of Dino Run.",
@@ -55,13 +60,11 @@ COMMANDS = {
     },
     "rockpaperscissors": {
         "desc": "Play a game of Rock Paper Scissors.",
-        "aliases": ["rps"],
         "usage": f"{PREFIX}rockpaperscissors <opponent>",
     },
-    "tictactoe": {"desc": "Play a game of Tic Tac Toe.", "aliases": ["ttt"], "usage": f"{PREFIX}tictactoe <opponent>"},
+    "tictactoe": {"desc": "Play a game of Tic Tac Toe.", "usage": f"{PREFIX}tictactoe <opponent>"},
     "connect4": {
         "desc": "Play a game of Connect 4.",
-        "aliases": ["c4"],
         "usage": f"{PREFIX}connect4 <opponent>",
         "instructions": "Connect 4 dots in a row to win!",
     },
@@ -85,7 +88,6 @@ COMMANDS = {
     },
     "arena": {
         "desc": "Climb the arena tower: each win unlocks the next, harder floor.",
-        "aliases": ["pve"],
         "usage": f"{PREFIX}arena",
         "instructions": "5 attempts a day. Floors scale up and rotate fighting styles; every 5th floor is a "
         "boss with a bigger payout. First clears pay coins and XP, and floors 10 and 25 grant titles.",
@@ -114,7 +116,6 @@ COMMANDS = {
     },
     "duelrank": {
         "desc": "See the duel rating leaderboard.",
-        "aliases": ["duelboard"],
         "usage": f"{PREFIX}duelrank",
     },
     "flagle": {
@@ -124,31 +125,27 @@ COMMANDS = {
     },
     "mathematics": {
         "desc": "Solve mathematical problems.",
-        "aliases": ["math", "maths"],
         "usage": f"{PREFIX}mathematics <category>",
         "instructions": "Categories: addition, subtraction, multiplication, division.",
     },
     "blackjack": {
         "desc": "Play Blackjack against the bot, optionally wagering MiniCoins.",
-        "aliases": ["bj"],
         "usage": f"{PREFIX}blackjack [bet]",
         "instructions": "Get as close to 21 as possible without going over. `hit` to draw or `stay` to hold. "
         "Add a bet to wager MiniCoins: win pays double, a tie returns your bet.",
     },
     "coinflip": {
         "desc": "Bet MiniCoins on a coin flip.",
-        "aliases": ["cf"],
         "usage": f"{PREFIX}coinflip <bet> <heads|tails>",
         "instructions": "Guess the side. A correct call pays double your bet.",
     },
     "slots": {
         "desc": "Bet MiniCoins on the slot machine.",
-        "aliases": ["slot"],
         "usage": f"{PREFIX}slots <bet>",
         "instructions": "Three of a kind pays big, two of a kind returns your bet, anything else loses it.",
     },
     "8ball": {"desc": "Ask the magic 8-ball a question.", "usage": f"{PREFIX}8ball <question>"},
-    "truthordare": {"desc": "Play a game of Truth or Dare.", "aliases": ["tod"], "usage": f"{PREFIX}truthordare"},
+    "truthordare": {"desc": "Play a game of Truth or Dare.", "usage": f"{PREFIX}truthordare"},
     "riddle": {"desc": "Solve a riddle.", "usage": f"{PREFIX}riddle", "instructions": "Solve the riddle to win!"},
     "race": {
         "desc": "Race against another user.",
@@ -157,31 +154,26 @@ COMMANDS = {
     },
     "wordguess": {
         "desc": "Guess the hidden 5-letter word in 6 tries.",
-        "aliases": ["wg"],
         "usage": f"{PREFIX}wordguess",
         "instructions": "🟩 right letter & spot · 🟨 right letter, wrong spot · ⬛ not in the word.",
     },
     "emojiguess": {
         "desc": "Guess the word or phrase from emojis.",
-        "aliases": ["emoji"],
         "usage": f"{PREFIX}emojiguess",
         "instructions": "You'll get a few emojis. Type the word or phrase they represent.",
     },
     "unscramble": {
         "desc": "Unscramble the shuffled letters into a word.",
-        "aliases": ["scramble"],
         "usage": f"{PREFIX}unscramble",
         "instructions": "Rearrange the jumbled letters and type the word before the timer runs out.",
     },
     "guessnumber": {
         "desc": "Guess the number between 1 and 1000.",
-        "aliases": ["gn", "higherlower"],
         "usage": f"{PREFIX}guessnumber",
         "instructions": "I'll say higher or lower after each guess until you find it.",
     },
     "bombparty": {
         "desc": "Pass a lit bomb around and type words for 2 to 6 players.",
-        "aliases": ["bomb", "bp"],
         "usage": f"{PREFIX}bombparty",
         "instructions": "Anyone in the channel can hit Join. On your turn, type any word containing the letters "
         "shown. Wrong guesses don't buy you more time, and the clock gets shorter every round. Everyone gets "
@@ -190,13 +182,11 @@ COMMANDS = {
     },
     "simulate": {
         "desc": "Simulate a game of cricket.",
-        "aliases": ["sim"],
         "usage": f"{PREFIX}simulate",
         "instructions": "Enter team and player names to simulate a match. 11 players per side, comma-separated.",
     },
     "playcricket": {
         "desc": "Play a game of classic hand cricket.",
-        "aliases": ["play"],
         "usage": f"{PREFIX}playcricket",
         "instructions": "Don't guess the same number as the bot!",
     },
@@ -207,14 +197,12 @@ COMMANDS = {
     },
     "quests": {
         "desc": "See your daily and weekly quests and their progress.",
-        "aliases": ["quest", "q"],
         "usage": f"{PREFIX}quests",
         "instructions": "Three dailies and two weeklies, drawn for you. They complete automatically as you "
         "play, win, duel, earn, or wager. Finish all three dailies for a bonus.",
     },
     "balance": {
         "desc": "Check your MiniCoins balance.",
-        "aliases": ["bal", "coins"],
         "usage": f"{PREFIX}balance",
     },
     "shop": {
@@ -229,12 +217,10 @@ COMMANDS = {
     },
     "richest": {
         "desc": "See the players with the most MiniCoins.",
-        "aliases": ["rich", "baltop"],
         "usage": f"{PREFIX}richest",
     },
     "achievements": {
         "desc": "View your earned achievements.",
-        "aliases": ["achs"],
         "usage": f"{PREFIX}achievements [member]",
     },
     "vote": {
@@ -249,34 +235,61 @@ COMMANDS = {
     },
     "leaderboard": {
         "desc": "View the leaderboard for a game.",
-        "aliases": ["lb"],
         "usage": f"{PREFIX}leaderboard <game> [server]",
         "instructions": "Shows the global board by default. Add `server` (e.g. `;lb dino server`) "
         "for this server's board only.",
     },
-    "define": {"desc": "Define a word.", "aliases": ["def"], "usage": f"{PREFIX}define <word>"},
+    "define": {"desc": "Define a word.", "usage": f"{PREFIX}define <word>"},
     "urbandictionary": {
         "desc": "Get a word's definition from Urban Dictionary.",
-        "aliases": ["urban"],
         "usage": f"{PREFIX}urbandictionary <word>",
     },
-    "botinfo": {"desc": "Get information about the bot.", "aliases": ["bot", "info"], "usage": f"{PREFIX}botinfo"},
+    "botinfo": {"desc": "Get information about the bot.", "usage": f"{PREFIX}botinfo"},
     "donate": {
         "desc": "Support the bot, entirely optional.",
-        "aliases": ["support", "kofi"],
         "usage": f"{PREFIX}donate",
         "instructions": "MiniGames is free forever. Tips are goodwill only: they unlock nothing in the bot, "
         "they just get you a supporter role in the support server.",
     },
+    "setchannel": {
+        "desc": "Pin a game to a channel. Server admins only.",
+        "usage": f"{PREFIX}setchannel <game> <channel>",
+        "instructions": "The game can then only be played in that channel, and that channel only runs the "
+        "games pinned to it. Run it again with another channel to give a game a second home, or with another "
+        "game to let one channel run both.",
+    },
+    "unsetchannel": {
+        "desc": "Unpin games from a channel. Server admins only.",
+        "usage": f"{PREFIX}unsetchannel <game> [channel]\n{PREFIX}unsetchannel <channel>",
+        "instructions": "`;unsetchannel connect4` unpins Connect 4 everywhere. `;unsetchannel #connect-four` "
+        "clears every game pinned to that channel. Give both to remove just that one pin.",
+    },
+    "disable": {
+        "desc": "Turn the bot off in a channel. Server admins only.",
+        "usage": f"{PREFIX}disable [channel]",
+        "instructions": "Leave the channel out to turn me off where you are. Threads go quiet with their "
+        "channel. Admins can still run `;enable` there to turn me back on.",
+    },
+    "enable": {
+        "desc": "Turn the bot back on in a channel. Server admins only.",
+        "usage": f"{PREFIX}enable [channel]",
+        "instructions": "Leave the channel out to turn me back on where you are.",
+    },
+    "gamechannels": {
+        "desc": "See which games are pinned to which channels, and where I'm turned off.",
+        "usage": f"{PREFIX}gamechannels",
+    },
 }
 
-_ALIAS_TO_NAME = {alias: name for name, info in COMMANDS.items() for alias in info.get("aliases", [])}
+
+async def _command_autocomplete(interaction, current):
+    return [app_commands.Choice(name=n, value=n) for n in sorted(COMMANDS) if current.lower() in n][:25]
 
 
 def _overview_embed(bot):
     embed = embeds.branded(
         title="Help",
-        description=f"Use `{PREFIX}help <command>` for more info on a command.\n"
+        description=f"For more on one command, use `{PREFIX}help <command>` or `/help`.\n"
         f"[Support Server]({config.SUPPORT_SERVER}) | [Top.gg Vote]({config.TOPGG_VOTE}) | "
         f"[Ko-fi]({config.KOFI_URL})",
     )
@@ -287,11 +300,12 @@ def _overview_embed(bot):
     return embed
 
 
-def _command_embed(name):
+def _command_embed(bot, name):
     info = COMMANDS[name]
     embed = embeds.branded(title=name.capitalize(), description=info["desc"])
-    if info.get("aliases"):
-        embed.add_field(name="Aliases", value=", ".join(info["aliases"]), inline=False)
+    command = bot.get_command(name)
+    if command and command.aliases:
+        embed.add_field(name="Aliases", value=", ".join(command.aliases), inline=False)
     embed.add_field(name="Usage", value=info["usage"], inline=False)
     if info.get("instructions"):
         embed.add_field(name="Instructions", value=info["instructions"], inline=False)
@@ -302,21 +316,37 @@ class Help(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def _lookup(self, text):
+        """A typed command name or alias as its help entry, or None if there isn't one."""
+        command = self.bot.get_command(text.lower().lstrip(";/"))
+        name = command.qualified_name if command else text.lower()
+        return name if name in COMMANDS else None
+
     @commands.command(name="help")
     async def help_prefix(self, ctx, command_name: str = None):
         if command_name is None:
             await ctx.send(embed=_overview_embed(self.bot))
             return
-        name = command_name.lower().lstrip(config.COMMAND_PREFIX)
-        name = _ALIAS_TO_NAME.get(name, name)
-        if name in COMMANDS:
-            await ctx.send(embed=_command_embed(name))
+        name = self._lookup(command_name)
+        if name:
+            await ctx.send(embed=_command_embed(self.bot, name))
         else:
-            await ctx.send(f"No help found for `{command_name}`. Use `{PREFIX}help` for the command list.")
+            await ctx.send(f"No help found for `{command_name[:40]}`. Use `{PREFIX}help` for the command list.")
 
-    @app_commands.command(name="help", description="See the list of commands.")
-    async def help_slash(self, interaction: discord.Interaction):
-        await interaction.response.send_message(embed=_overview_embed(self.bot))
+    @app_commands.command(name="help", description="See the list of commands, or how one of them works")
+    @app_commands.describe(command="A command to explain. Leave it empty for the full list")
+    @app_commands.autocomplete(command=_command_autocomplete)
+    async def help_slash(self, interaction: discord.Interaction, command: str = None):
+        if command is None:
+            await interaction.response.send_message(embed=_overview_embed(self.bot))
+            return
+        name = self._lookup(command)
+        if name:
+            await interaction.response.send_message(embed=_command_embed(self.bot, name))
+        else:
+            await interaction.response.send_message(
+                f"No help found for `{command[:40]}`. Use `/help` for the command list.", ephemeral=True
+            )
 
 
 async def setup(bot):

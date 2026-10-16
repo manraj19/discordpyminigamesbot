@@ -34,7 +34,7 @@ class Fight(commands.Cog):
         await ctx.send(CHALLENGE_GIF)
         await ctx.send(embed=_instructions_embed())
         view = FightView(ctx.author, opponent, on_win=self._record_win)
-        await ctx.send(f"{view.turn.mention}, choose your first move:", view=view)
+        view.message = await ctx.send(f"{view.turn.mention}, choose your first move:", view=view)
 
     @app_commands.command(name="fight", description="Challenge another user to a fight")
     @app_commands.describe(opponent="The member you want to challenge")
@@ -51,7 +51,9 @@ class Fight(commands.Cog):
         await interaction.followup.send(CHALLENGE_GIF)
         await interaction.followup.send(embed=_instructions_embed())
         view = FightView(interaction.user, opponent, on_win=self._record_win)
-        await interaction.followup.send(f"{view.turn.mention}, choose your first move:", view=view)
+        view.message = await interaction.followup.send(
+            f"{view.turn.mention}, choose your first move:", view=view, wait=True
+        )
 
 
 async def setup(bot):

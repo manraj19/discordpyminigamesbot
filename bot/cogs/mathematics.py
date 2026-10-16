@@ -34,13 +34,7 @@ class Mathematics(commands.Cog):
         self.bot = bot
 
     async def _play(self, channel, player, quiz_type):
-        if not self.bot.begin_session(player.id):
-            await channel.send("⚠️ Finish your current game first.")
-            return
-        try:
-            await self._run(channel, player, quiz_type)
-        finally:
-            self.bot.end_session(player.id)
+        await self.bot.play(channel, [player], lambda: self._run(channel, player, quiz_type))
 
     async def _run(self, channel, player, quiz_type):
         score = 0

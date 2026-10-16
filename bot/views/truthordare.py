@@ -1,5 +1,6 @@
 """Truth or Dare view: a 'Next' button that serves a fresh random prompt."""
 
+import contextlib
 import random
 
 import discord
@@ -33,7 +34,5 @@ class TruthOrDareView(discord.ui.View):
         for child in self.children:
             child.disabled = True
         if self.message:
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
-            except discord.HTTPException:
-                pass

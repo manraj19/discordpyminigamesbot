@@ -1,6 +1,7 @@
 """Cricket commands: a full match simulator, hand cricket, and live scores."""
 
 import asyncio
+import contextlib
 import random
 
 import discord
@@ -54,10 +55,8 @@ class Cricket(commands.Cog):
             feed = feed[-5:]
             embed.description = header + "\n\n" + "\n".join(feed)
             embed.color = 0xE74C3C if ev["kind"] == "wicket" else 0xF1C40F if ev["kind"] == "milestone" else 0x1F8B4C
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await message.edit(embed=embed)
-            except discord.HTTPException:
-                pass
             await asyncio.sleep(PACE_BIG if ev["kind"] in ("wicket", "milestone") else PACE_NORMAL)
         return message
 
@@ -89,13 +88,7 @@ class Cricket(commands.Cog):
         return [p.strip() for p in msg.content.split(",")]
 
     async def _simulate(self, channel, author):
-        if not self.bot.begin_session(author.id):
-            await channel.send("⚠️ Finish your current game first.")
-            return
-        try:
-            await self._run_simulate(channel, author)
-        finally:
-            self.bot.end_session(author.id)
+        await self.bot.play(channel, [author], lambda: self._run_simulate(channel, author))
 
     async def _run_simulate(self, channel, author):
         team1_name = await self._prompt(channel, author, "Enter the name of Team 1:")
@@ -205,61 +198,54 @@ class Cricket(commands.Cog):
 
     # --- hand cricket ---
     async def _hand_cricket(self, channel, author):
-        if not self.bot.begin_session(author.id):
-            await channel.send("⚠️ Finish your current game first.")
-            return
-        try:
-            await self._run_hand_cricket(channel, author)
-        finally:
-            self.bot.end_session(author.id)
+        await self.bot.play(channel, [author], lambda: self._run_hand_cricket(channel, author))
 
     async def _run_hand_cricket(self, channel, author):
-        user_score = 0
-        bot_score = 0
-
         def check(m):
             return (
                 m.author == author
                 and m.channel == channel
-                and m.content.isdigit()
+                and m.content.isdecimal()
                 and int(m.content) in HAND_CRICKET_OPTIONS
             )
 
+        async def innings(you_bat, target=None):
+            """Play one innings and return its score, or None if the player went quiet.
+            A chase ends as soon as it passes ``target``."""
+            score = 0
+            while target is None or score <= target:
+                try:
+                    message = await self.bot.wait_for("message", check=check, timeout=30.0)
+                except asyncio.TimeoutError:
+                    await channel.send("You took too long to respond. Game over.")
+                    return None
+                user_choice = int(message.content)
+                bot_choice = random.choice(HAND_CRICKET_OPTIONS)
+                await channel.send(f"You chose {user_choice}, Bot chose {bot_choice}")
+                if user_choice == bot_choice:
+                    whose = "Your" if you_bat else "Bot's"
+                    await channel.send(f"Out! {whose} score: {score}")
+                    break
+                score += user_choice if you_bat else bot_choice
+            return score
+
         await channel.send("First Half: You are batting. Type a number (1, 2, 3, 4, 6) to play your shot.")
-        while True:
-            try:
-                message = await self.bot.wait_for("message", check=check, timeout=30.0)
-            except asyncio.TimeoutError:
-                await channel.send("You took too long to respond. Game over.")
-                return
-            user_choice = int(message.content)
-            bot_choice = random.choice(HAND_CRICKET_OPTIONS)
-            await channel.send(f"You chose {user_choice}, Bot chose {bot_choice}")
-            if user_choice == bot_choice:
-                await channel.send(f"Out! Your score: {user_score}")
-                break
-            user_score += user_choice
-
+        user_score = await innings(you_bat=True)
+        if user_score is None:
+            return
         await channel.send("Second Half: Bot is batting. Type a number (1, 2, 3, 4, 6) to bowl.")
-        while bot_score <= user_score:
-            try:
-                message = await self.bot.wait_for("message", check=check, timeout=30.0)
-            except asyncio.TimeoutError:
-                await channel.send("You took too long to respond. Game over.")
-                return
-            user_choice = int(message.content)
-            bot_choice = random.choice(HAND_CRICKET_OPTIONS)
-            await channel.send(f"You chose {user_choice}, Bot chose {bot_choice}")
-            if user_choice == bot_choice:
-                await channel.send(f"Out! Bot's score: {bot_score}")
-                break
-            bot_score += bot_choice
+        bot_score = await innings(you_bat=False, target=user_score)
+        if bot_score is None:
+            return
 
+        scores = f"**Final scores**\nYou: {user_score}\nBot: {bot_score}"
         if bot_score > user_score:
-            await channel.send(f"Bot wins!\n**Final scores**\nYou: {user_score}\nBot: {bot_score}")
+            await channel.send(f"Bot wins!\n{scores}")
+        elif bot_score == user_score:
+            await channel.send(f"It's a tie!\n{scores}")
         else:
             result = self.bot.reward(author, 1, "playcricket")
-            await channel.send(f"You win!\n**Final scores**\nYou: {user_score}\nBot: {bot_score}\n{result.line()}")
+            await channel.send(f"You win!\n{scores}\n{result.line()}")
 
     @commands.command(aliases=["play"])
     @commands.cooldown(1, 30, commands.BucketType.user)

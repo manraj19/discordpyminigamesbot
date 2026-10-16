@@ -33,6 +33,17 @@ class HttpClient:
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
             return None, None
 
+    async def post_json(self, url, payload, *, headers=None):
+        """POST ``payload`` as JSON and return the status, or None on a network error."""
+        session = await self._get_session()
+        try:
+            async with session.post(
+                url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                return response.status
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            return None
+
     async def close(self):
         if self._session and not self._session.closed:
             await self._session.close()

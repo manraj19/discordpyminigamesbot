@@ -5,6 +5,7 @@ of them appear usable to anyone else. They are prefix-only by design (no slash),
 keeping owner tooling out of the public command list.
 """
 
+import contextlib
 import datetime
 
 import discord
@@ -49,28 +50,8 @@ class Admin(commands.Cog):
         coins, _ = self.bot.economy.balance(member.id)
         await ctx.send(f"Gave {amount} MiniCoins to {member.mention}. Their balance is now {coins}.")
 
-    @commands.command()
-    async def disable(self, ctx, channel_id: int = None):
-        """Disable the bot in a channel. Defaults to the current channel."""
-        channel_id = channel_id or ctx.channel.id
-        self.bot.channel_lock.disable(channel_id)
-        await ctx.send(f"Disabled the bot in <#{channel_id}> (`{channel_id}`). Re-enable with `;enable {channel_id}`.")
-
-    @commands.command()
-    async def enable(self, ctx, channel_id: int = None):
-        """Re-enable the bot in a channel. Defaults to the current channel."""
-        channel_id = channel_id or ctx.channel.id
-        self.bot.channel_lock.enable(channel_id)
-        await ctx.send(f"Re-enabled the bot in <#{channel_id}> (`{channel_id}`).")
-
-    @commands.command()
-    async def disabledchannels(self, ctx):
-        """List the channels where the bot is disabled."""
-        ids = self.bot.channel_lock.all()
-        if not ids:
-            await ctx.send("No channels are disabled.")
-            return
-        await ctx.send("Disabled channels:\n" + "\n".join(f"<#{c}> (`{c}`)" for c in ids))
+    # ;disable and ;enable are in the server admin cog, since server admins use
+    # them too. The owner can run them in any server, or by channel ID from a DM.
 
     @commands.command()
     async def resetseason(self, ctx):
@@ -182,10 +163,8 @@ class Admin(commands.Cog):
     @commands.command()
     async def say(self, ctx, *, message: str):
         """Send a message as the bot in the current channel."""
-        try:
+        with contextlib.suppress(discord.HTTPException):
             await ctx.message.delete()
-        except discord.HTTPException:
-            pass
         await ctx.send(message)
 
     @commands.command()

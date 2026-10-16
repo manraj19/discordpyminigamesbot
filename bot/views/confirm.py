@@ -1,5 +1,7 @@
 """A generic Yes/No confirmation prompt restricted to one user."""
 
+import contextlib
+
 import discord
 
 
@@ -36,7 +38,5 @@ class ConfirmView(discord.ui.View):
     async def on_timeout(self):
         self._disable()
         if self.message:
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(content="Confirmation timed out.", view=self)
-            except discord.HTTPException:
-                pass

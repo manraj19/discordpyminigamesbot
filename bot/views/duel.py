@@ -1,6 +1,8 @@
 """Duel UI: the combat board, the challenge accept/decline prompt, and the rules
 embed. All combat rules live in bot.games.duel; this only renders and routes."""
 
+import contextlib
+
 import discord
 
 from bot.core import emojis
@@ -158,8 +160,7 @@ class DuelView(discord.ui.View):
     async def on_button(self, interaction, ability_id):
         state = self.state
         if interaction.user.id != self.players[state.active].id:
-            msg = "It's not your turn!" if interaction.user.id in self.controllable else "This isn't your duel!"
-            await interaction.response.send_message(msg, ephemeral=True)
+            await interaction.response.send_message("It's not your turn!", ephemeral=True)
             return
         if ability_id not in available_moves(state):
             await interaction.response.send_message("That move isn't available right now.", ephemeral=True)
@@ -184,16 +185,25 @@ class DuelView(discord.ui.View):
         await interaction.response.edit_message(embed=self.embed(), view=self)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.id in self.controllable
+        if interaction.user.id in self.controllable:
+            return True
+        await interaction.response.send_message("This isn't your duel!", ephemeral=True)
+        return False
 
     async def on_timeout(self):
+        # Whoever was on the clock walked away, so they lose. Refunding instead
+        # would let a losing player dodge a wager or a rating drop by going quiet.
         self.disable_all()
+        quitter, winner = self.state.active, 1 - self.state.active
         if self.message:
-            try:
-                await self.message.edit(content="⌛ The duel timed out.", view=self)
-            except discord.HTTPException:
-                pass
-        await self.on_end(None)
+            with contextlib.suppress(discord.HTTPException):
+                await self.message.edit(
+                    content=f"⌛ {self.players[quitter].display_name} didn't move in time, so "
+                    f"{self.players[winner].display_name} wins.",
+                    embed=self.embed(self.state.fighters[winner]),
+                    view=self,
+                )
+        await self.on_end(winner)
 
 
 class DuelChallengeView(discord.ui.View):
@@ -232,10 +242,8 @@ class DuelChallengeView(discord.ui.View):
     async def on_timeout(self):
         self.disable_all()
         if self.message:
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(content="⌛ The duel challenge expired.", view=self)
-            except discord.HTTPException:
-                pass
 
 
 class LoadoutSelect(discord.ui.Select):
@@ -303,7 +311,5 @@ class LoadoutView(discord.ui.View):
         for item in self.children:
             item.disabled = True
         if self.message:
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
-            except discord.HTTPException:
-                pass

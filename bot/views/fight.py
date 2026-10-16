@@ -1,5 +1,6 @@
 """Fight view: a turn-based attack/defend duel between two players."""
 
+import contextlib
 import random
 
 import discord
@@ -80,11 +81,12 @@ class FirstMoveSelect(discord.ui.Select):
 
 
 class FightView(discord.ui.View):
-    def __init__(self, user1, user2, *, on_win=None):
+    def __init__(self, user1, user2, *, on_win):
         super().__init__(timeout=60.0)
         self.user1 = user1
         self.user2 = user2
-        self.on_win = on_win
+        self.on_win = on_win  # async callable(member) -> RewardResult
+        self.message = None
         self.hp = {user1: 100, user2: 100}
         self.crash_out_used = {user1: False, user2: False}
         self.round = 1
@@ -103,7 +105,7 @@ class FightView(discord.ui.View):
         self.add_item(CrashOutButton())
         self.add_item(DodgeButton())
         self.add_item(ParryButton())
-        self.disable_defense_buttons()
+        self._arm("attack")
         self.turn = self.attacker
         await self.update_embed(interaction)
 
@@ -117,10 +119,10 @@ class FightView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def end_game(self, interaction, winner):
-        result = await self.on_win(winner) if self.on_win else None
-        note = f"  ·  {result.line()}" if result and result.line() else ""
-        description = f"{winner.mention} wins!{note}"
-        embed = discord.Embed(title="Game Over", description=description)
+        line = (await self.on_win(winner)).line()
+        embed = discord.Embed(
+            title="Game Over", description=f"{winner.mention} wins!" + (f"  ·  {line}" if line else "")
+        )
         embed.add_field(name=f"{self.user1.name}'s HP", value=self.hp[self.user1], inline=True)
         embed.add_field(name=f"{self.user2.name}'s HP", value=self.hp[self.user2], inline=True)
         embed.set_image(url=_gif_for(self.last_action))
@@ -128,12 +130,11 @@ class FightView(discord.ui.View):
         self.stop()
 
     async def on_timeout(self):
-        for user in (self.user1, self.user2):
-            try:
-                await user.send("Nobody threw a punch, so the fight is over.")
-            except discord.HTTPException:
-                pass
-        self.stop()
+        if self.message:
+            with contextlib.suppress(discord.HTTPException):
+                await self.message.edit(
+                    content=f"⌛ {self.turn.mention} didn't move in time, so the fight's over.", view=None
+                )
 
     async def _finish_if_dead(self, interaction):
         """End the game the moment a player's HP reaches 0."""
@@ -150,16 +151,14 @@ class FightView(discord.ui.View):
         self.attacker, self.defender = self.defender, self.attacker
         self.turn = self.attacker
         self.round += 1
-        self.enable_attack_buttons()
-        self.disable_defense_buttons()
+        self._arm("attack")
 
     async def next_turn(self, interaction, skip_defense=False):
         # 1) A normal attack hands control to the defender first.
         if self.phase == "attack" and not skip_defense:
             self.phase = "defense"
             self.turn = self.defender
-            self.enable_defense_buttons()
-            self.disable_attack_buttons()
+            self._arm("defense")
             await self.update_embed(interaction)
             return
 
@@ -180,25 +179,10 @@ class FightView(discord.ui.View):
         self._advance_attacker()
         await self.update_embed(interaction)
 
-    def enable_attack_buttons(self):
+    def _arm(self, phase):
+        """Enable just this phase's buttons: the three attacks, or Dodge and Parry."""
         for item in self.children:
-            if isinstance(item, (AttackButton, HeavyAttackButton, CrashOutButton)):
-                item.disabled = False
-
-    def disable_attack_buttons(self):
-        for item in self.children:
-            if isinstance(item, (AttackButton, HeavyAttackButton, CrashOutButton)):
-                item.disabled = True
-
-    def enable_defense_buttons(self):
-        for item in self.children:
-            if isinstance(item, (DodgeButton, ParryButton)):
-                item.disabled = False
-
-    def disable_defense_buttons(self):
-        for item in self.children:
-            if isinstance(item, (DodgeButton, ParryButton)):
-                item.disabled = True
+            item.disabled = isinstance(item, (AttackButton, HeavyAttackButton, CrashOutButton)) != (phase == "attack")
 
     async def process_defense(self, interaction, defense_move):
         if defense_move == "Dodge":

@@ -7,13 +7,11 @@ _DATA_DIR = Path(__file__).parent
 
 
 def _load(name):
-    with open(_DATA_DIR / f"{name}.json", encoding="utf-8") as fh:
-        return json.load(fh)
+    return json.loads((_DATA_DIR / f"{name}.json").read_text(encoding="utf-8"))
 
 
 def _load_lines(name):
-    with open(_DATA_DIR / f"{name}.txt", encoding="utf-8") as fh:
-        return set(fh.read().split())
+    return set((_DATA_DIR / f"{name}.txt").read_text(encoding="utf-8").split())
 
 
 COUNTRIES = _load("countries")  # {alpha2_code: country_name}
@@ -33,4 +31,3 @@ BOMB_PROMPTS = _load("bomb_prompts")  # {fragment: how many words contain it}
 _cricket = _load("cricket_names")  # {"batsmen": [...], "bowlers": [...]}
 CRICKET_BATSMEN = _cricket["batsmen"]
 CRICKET_BOWLERS = _cricket["bowlers"]
-CRICKET_NAMES = CRICKET_BATSMEN + CRICKET_BOWLERS

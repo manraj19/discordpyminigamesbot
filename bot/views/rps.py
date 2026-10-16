@@ -1,6 +1,8 @@
 """Rock-Paper-Scissors view. Both players pick privately; the result is
 revealed once both have chosen. Scoring is injected via ``on_winner``."""
 
+import contextlib
+
 import discord
 
 from bot.games.rps import winner
@@ -24,18 +26,25 @@ class RPSButton(discord.ui.Button):
 
 
 class RPSView(discord.ui.View):
-    def __init__(self, player, opponent, *, on_winner=None):
+    def __init__(self, player, opponent, *, on_winner):
         super().__init__(timeout=30.0)
         self.player = player
         self.opponent = opponent
-        self.on_winner = on_winner
+        self.on_winner = on_winner  # async callable(member) -> RewardResult
         self.choices = {}
         self.message = None
         for choice in ("Rock", "Paper", "Scissors"):
             self.add_item(RPSButton(choice))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.id in (self.player.id, self.opponent.id)
+        if interaction.user.id in (self.player.id, self.opponent.id):
+            return True
+        await interaction.response.send_message("This game isn't yours.", ephemeral=True)
+        return False
+
+    def _disable(self):
+        for item in self.children:
+            item.disabled = True
 
     async def finish(self, interaction):
         player_choice = self.choices[self.player.id]
@@ -44,36 +53,23 @@ class RPSView(discord.ui.View):
 
         if result is None:
             outcome = "It's a tie!"
-        elif result == "a":
-            reward_result = await self.on_winner(self.player) if self.on_winner else None
-            note = f"  ·  {reward_result.line()}" if reward_result and reward_result.line() else ""
-            outcome = f"{self.player.mention} wins!{note}"
         else:
-            reward_result = await self.on_winner(self.opponent) if self.on_winner else None
-            note = f"  ·  {reward_result.line()}" if reward_result and reward_result.line() else ""
-            outcome = f"{self.opponent.mention} wins!{note}"
+            champ = self.player if result == "a" else self.opponent
+            line = (await self.on_winner(champ)).line()
+            outcome = f"{champ.mention} wins!" + (f"  ·  {line}" if line else "")
 
-        for item in self.children:
-            item.disabled = True
+        self._disable()
         await interaction.followup.send(
             f"{self.player.mention} chose {player_choice}\n{self.opponent.mention} chose {opponent_choice}\n{outcome}"
         )
         if self.message:
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
-            except discord.HTTPException:
-                pass
         self.stop()
 
     async def on_timeout(self):
-        for item in self.children:
-            item.disabled = True
+        self._disable()
+        late = " and ".join(p.mention for p in (self.player, self.opponent) if p.id not in self.choices)
         if self.message:
-            try:
-                await self.message.edit(
-                    content="Time's up. Nobody picked, so the game is off.",
-                    view=self,
-                )
-            except discord.HTTPException:
-                pass
-        self.stop()
+            with contextlib.suppress(discord.HTTPException):
+                await self.message.edit(content=f"⌛ {late} didn't pick in time, so the game's off.", view=self)

@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core.utils import run_countdown
-from bot.data import WORDS
+from bot.data import DICTIONARY, WORDS
 
 GAME = "unscramble"
 ROUND_SECONDS = 7
@@ -30,13 +30,7 @@ class Unscramble(commands.Cog):
         self.bot = bot
 
     async def _play(self, channel, player):
-        if not self.bot.begin_session(player.id):
-            await channel.send("⚠️ Finish your current game first.")
-            return
-        try:
-            await self._run(channel, player)
-        finally:
-            self.bot.end_session(player.id)
+        await self.bot.play(channel, [player], lambda: self._run(channel, player))
 
     async def _run(self, channel, player):
         answer = random.choice(WORDS).lower()
@@ -57,8 +51,13 @@ class Unscramble(commands.Cog):
         finally:
             ticker.cancel()
 
-        if guess.content.strip().lower() == answer:
-            await channel.send(f"✅ Correct! It was **{answer.upper()}**.")
+        word = guess.content.strip().lower()
+        # Any real word made of exactly these letters counts, not just the one I picked.
+        if word == answer or (word in DICTIONARY and sorted(word) == sorted(answer)):
+            if word == answer:
+                await channel.send(f"✅ Correct! It was **{answer.upper()}**.")
+            else:
+                await channel.send(f"✅ That works! I had **{answer.upper()}** in mind, but **{word.upper()}** counts.")
             result = self.bot.reward(player, 1, GAME)
             await channel.send(result.line())
         else:

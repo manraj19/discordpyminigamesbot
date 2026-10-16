@@ -30,6 +30,7 @@ EXTENSIONS = [
     "bot.cogs.help",
     "bot.cogs.topgg",
     "bot.cogs.utility",
+    "bot.cogs.serveradmin",
     "bot.cogs.cricket",
     "bot.cogs.dino",
     "bot.cogs.mathematics",
@@ -78,7 +79,6 @@ class MiniGamesBot(commands.AutoShardedBot):
         self.usage = UsageService()
         self.quests = QuestService()
         self.http_client = HttpClient()
-        self.topgg_client = None  # set by the Top.gg cog when a token is configured
         self.active_sessions = set()  # user ids currently in a chat-based game (one at a time)
         self.start_time = discord.utils.utcnow()
 
@@ -92,6 +92,28 @@ class MiniGamesBot(commands.AutoShardedBot):
 
     def end_session(self, user_id):
         self.active_sessions.discard(user_id)
+
+    async def play(self, channel, players, game):
+        """Run ``await game()`` while every player holds a game slot, so nobody's
+        typing gets read by two chat games at once. Refuses up front, holding
+        nothing, if anyone is already playing."""
+        held = []
+        for player in players:
+            if not self.begin_session(player.id):
+                for p in held:
+                    self.end_session(p.id)
+                if player is players[0]:
+                    busy = "Finish your current game first."
+                else:
+                    busy = f"{player.display_name} is in another game right now."
+                await channel.send(f"⚠️ {busy}")
+                return
+            held.append(player)
+        try:
+            await game()
+        finally:
+            for player in players:
+                self.end_session(player.id)
 
     async def setup_hook(self):
         setup_error_handlers(self)

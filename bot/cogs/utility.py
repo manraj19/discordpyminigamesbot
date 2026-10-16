@@ -25,9 +25,9 @@ class Utility(commands.Cog):
         url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(word)}"
         status, data = await self.bot.http_client.fetch_json(url)
         if status != 200 or not data or isinstance(data, dict):
-            return f"No definition found for '{word}'.", None
+            return f"No definition found for '{word[:100]}'.", None
 
-        embed = discord.Embed(title=f"Definition of {word}", color=0x7289DA)
+        embed = discord.Embed(title=f"Definition of {word[:100]}", color=0x7289DA)
         for meaning in data[0]["meanings"]:
             definitions_text = "\n".join(d["definition"] for d in meaning["definitions"])
             if len(definitions_text) > 1024:
@@ -55,9 +55,9 @@ class Utility(commands.Cog):
         url = f"https://api.urbandictionary.com/v0/define?term={quote(term)}"
         status, data = await self.bot.http_client.fetch_json(url)
         if status != 200 or not data or not data.get("list"):
-            return f"No definition found for '{term}'.", None
+            return f"No definition found for '{term[:100]}'.", None
 
-        embed = discord.Embed(title=f"Urban Dictionary: {term}", color=0x7289DA)
+        embed = discord.Embed(title=f"Urban Dictionary: {term[:100]}", color=0x7289DA)
         for i, definition in enumerate(data["list"][:5], 1):
             def_text = definition["definition"]
             example_text = definition["example"]
@@ -106,23 +106,9 @@ class Utility(commands.Cog):
 
     @app_commands.command(name="leaderboard", description="View a game's leaderboard (global, or this server)")
     @app_commands.describe(game="Which game's leaderboard to view", scope="Global (default) or this server")
+    @app_commands.choices(game=[app_commands.Choice(name=g, value=g) for g in SUPPORTED_GAMES])
     async def leaderboard_slash(
-        self,
-        interaction: discord.Interaction,
-        game: Literal[
-            "dino",
-            "flagle",
-            "fight",
-            "connect4",
-            "rockpaperscissors",
-            "tictactoe",
-            "wordguess",
-            "emojiguess",
-            "mathematics",
-            "unscramble",
-            "bombparty",
-        ],
-        scope: Literal["global", "server"] = "global",
+        self, interaction: discord.Interaction, game: str, scope: Literal["global", "server"] = "global"
     ):
         guild_id = interaction.guild.id if scope == "server" and interaction.guild else None
         error, embed = self._leaderboard(game, guild_id)
@@ -167,6 +153,7 @@ class Utility(commands.Cog):
         await ctx.send(embed=self._profile(ctx.author))
 
     @app_commands.command(name="profile", description="View your game profile")
+    @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
     async def profile_slash(self, interaction: discord.Interaction):
         await interaction.response.send_message(embed=self._profile(interaction.user))
 
