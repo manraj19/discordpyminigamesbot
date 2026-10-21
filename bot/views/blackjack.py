@@ -10,11 +10,12 @@ from bot.games.gambling import settle_blackjack
 
 
 class BlackjackView(discord.ui.View):
-    def __init__(self, player, *, bot, bet=0):
+    def __init__(self, player, *, bot, bet=0, stake=None):
         super().__init__(timeout=180.0)
         self.player = player
         self.bot = bot
         self.bet = bet
+        self.stake = stake  # the open-stake id for the bet, closed once it's paid out
         self.settled = False
         self.deck = create_deck()
         self.player_hand = [self.draw_card(), self.draw_card()]
@@ -81,6 +82,7 @@ class BlackjackView(discord.ui.View):
             credit = settle_blackjack(result, self.bet)
             if credit:
                 self.bot.economy.add_coins(self.player.id, str(self.player), credit)
+            self._close_stake()
             net = credit - self.bet
             if net > 0:
                 coins_text = f"You won **+{net}** MiniCoins {emojis.COIN}"
@@ -92,6 +94,19 @@ class BlackjackView(discord.ui.View):
         self.settled = True
         self.stop()
         return embed
+
+    def _close_stake(self):
+        if self.stake is not None:
+            self.bot.economy.close_stake(self.stake)
+            self.stake = None
+
+    def refund(self):
+        """Hand the bet back, for a table that never reached the channel."""
+        if self.bet and not self.settled:
+            self.bot.economy.add_coins(self.player.id, str(self.player), self.bet)
+            self._close_stake()
+        self.settled = True
+        self.stop()
 
     async def end_game(self, interaction, result):
         await interaction.response.edit_message(embed=self._settle(result), view=None)

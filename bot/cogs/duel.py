@@ -60,13 +60,17 @@ class Duel(commands.Cog):
         stats = aggregate_stats(rec["level"], rec["weapon"], rec["armor"], rec["accessory"], levels)
         return make_combatant(name or member.display_name, stats, rec["loadout"]), rec
 
-    async def _settle(self, channel, players, records, mode, bet, widx):
+    def _return_stakes(self, players, bet, stakes):
+        """Hand each player's wager back and close their stake. ``stakes`` can be
+        shorter than ``players`` when someone couldn't cover the bet."""
+        for player, stake in zip(players, stakes, strict=False):
+            self.bot.economy.add_coins(player.id, str(player), bet)
+            self.bot.economy.close_stake(stake)
+
+    async def _settle(self, channel, players, records, mode, bet, widx, stakes):
         if widx == "draw":  # the turn cap hit with nobody ahead
-            refund = mode == "casual" and bet
-            if refund:
-                for player in players:
-                    self.bot.economy.add_coins(player.id, str(player), bet)
-            note = f" The {bet}-MiniCoin wagers were refunded." if refund else ""
+            self._return_stakes(players, bet, stakes)
+            note = f" The {bet}-MiniCoin wagers were refunded." if stakes else ""
             await channel.send(f"🤝 The duel hit the turn limit and ended in a draw.{note}")
             return
         winner, loser = players[widx], players[1 - widx]
@@ -91,6 +95,8 @@ class Duel(commands.Cog):
         else:
             prize = bet * 2 if bet else CASUAL_WIN_COINS
             self.bot.economy.add_coins(winner.id, str(winner), prize)
+            for stake in stakes:
+                self.bot.economy.close_stake(stake)
             note = f"takes the **{prize}**-MiniCoin pot" if bet else f"earns **{prize}** MiniCoins"
             win_level = self.bot.duel.apply_match(winner.id, str(winner), True, CASUAL_WIN_XP)
             loss_level = self.bot.duel.apply_match(loser.id, str(loser), False, CASUAL_LOSS_XP)
@@ -105,14 +111,14 @@ class Duel(commands.Cog):
         ).line()
         await channel.send(f"{msg}\n{extra}" if extra else msg)
 
-    async def _begin(self, channel, p0, p1, mode, bet):
+    async def _begin(self, channel, p0, p1, mode, bet, stakes):
         c0, r0 = self._fighter(p0)
         c1, r1 = self._fighter(p1)
         state = new_duel(c0, c1, random.randint(0, 1))  # random first move
         players, records = [p0, p1], [r0, r1]
 
         async def on_end(widx):
-            await self._settle(channel, players, records, mode, bet, widx)
+            await self._settle(channel, players, records, mode, bet, widx, stakes)
 
         await channel.send(embed=rules_embed())
         view = DuelView(players, state, on_end=on_end)
@@ -129,15 +135,21 @@ class Duel(commands.Cog):
                         "Ratings are too far apart for a ranked duel right now. Play a casual one instead."
                     )
                     return
+            stakes = []
             if mode == "casual" and bet:
-                if not self.bot.economy.spend(challenger.id, bet):
-                    await channel.send(f"{challenger.mention} can no longer cover the {bet}-MiniCoin wager.")
-                    return
-                if not self.bot.economy.spend(opponent.id, bet):
-                    self.bot.economy.add_coins(challenger.id, str(challenger), bet)
-                    await channel.send(f"{opponent.mention} can't cover the {bet}-MiniCoin wager.")
-                    return
-            await self._begin(channel, challenger, opponent, mode, bet)
+                for player in (challenger, opponent):
+                    stake = self.bot.economy.stake(player.id, str(player), bet, "duel")
+                    if stake is None:
+                        self._return_stakes([challenger], bet, stakes)
+                        who = "can no longer" if player is challenger else "can't"
+                        await channel.send(f"{player.mention} {who} cover the {bet}-MiniCoin wager.")
+                        return
+                    stakes.append(stake)
+            try:
+                await self._begin(channel, challenger, opponent, mode, bet, stakes)
+            except Exception:  # the board never reached the channel, so nobody can finish this duel
+                self._return_stakes([challenger, opponent], bet, stakes)
+                raise
 
         if mode == "ranked":
             label = "a **ranked** duel"

@@ -95,29 +95,25 @@ def live_pins(client, guild_id):
     return {game: chans for game, chans in live.items() if chans}
 
 
-def game_channel_block(pins, game, channel_id, fix_prefix=None):
+def game_channel_block(pins, game, channel_id):
     """Why ``game`` can't start in ``channel_id`` under a server's pins, or None if
-    it can. With ``fix_prefix`` (for admins) it also says how to change that."""
+    it can. It only says where to play, never how to undo the pin: that's for
+    admins to find in ``;help``, not for every player who bumps into it."""
     if game not in GAMES:
         return None
     homes = pins.get(game)
     if homes and channel_id not in homes:
-        reason = f"`{game}` lives in {mention_all(homes)} on this server."
-        fix = f"To unpin it, run `{fix_prefix}unsetchannel {game}`."
-    else:
-        pinned_here = sorted(g for g, chans in pins.items() if channel_id in chans)
-        if not pinned_here or game in pinned_here:
-            return None
-        reason = f"This channel is just for {join_and(f'`{g}`' for g in pinned_here)}."
-        fix = f"To lift that, run `{fix_prefix}unsetchannel` <#{channel_id}>."
-    return f"{reason} {fix}" if fix_prefix else reason
+        return f"`{game}` lives in {mention_all(homes)} on this server."
+    pinned_here = sorted(g for g, chans in pins.items() if channel_id in chans)
+    if pinned_here and game not in pinned_here:
+        return f"This channel is just for {join_and(f'`{g}`' for g in pinned_here)}."
+    return None
 
 
-def _game_block(client, guild_id, channel, user, game, prefix):
+def _game_block(client, guild_id, channel, game):
     if not (getattr(client, "channel_lock", None) and guild_id and channel):
         return None
-    fix_prefix = prefix if _is_admin(user) else None
-    return game_channel_block(live_pins(client, guild_id), game, _root(channel), fix_prefix)
+    return game_channel_block(live_pins(client, guild_id), game, _root(channel))
 
 
 class BlocklistCommandTree(app_commands.CommandTree):
@@ -129,7 +125,7 @@ class BlocklistCommandTree(app_commands.CommandTree):
         if _turned_off(client, channel, user, command):
             note = _off_note(user, "/")
         else:
-            note = _game_block(client, interaction.guild_id, channel, user, command, "/")
+            note = _game_block(client, interaction.guild_id, channel, command)
         # Only the person who ran it sees why, so nobody else's channel gets noisy.
         if note and interaction.type is discord.InteractionType.application_command:
             await interaction.response.send_message(note, ephemeral=True)
@@ -145,7 +141,7 @@ async def global_blocklist_check(ctx):
     if _turned_off(ctx.bot, ctx.channel, ctx.author, command):
         # Players get silence, since a switched-off channel should stay quiet.
         raise ChannelDisabled(_off_note(ctx.author, ";") if _is_admin(ctx.author) else "")
-    reason = _game_block(ctx.bot, ctx.guild and ctx.guild.id, ctx.channel, ctx.author, command, ";")
+    reason = _game_block(ctx.bot, ctx.guild and ctx.guild.id, ctx.channel, command)
     if reason:
         raise WrongChannel(reason)
     return True

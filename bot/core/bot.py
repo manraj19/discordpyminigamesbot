@@ -116,6 +116,11 @@ class MiniGamesBot(commands.AutoShardedBot):
                 self.end_session(player.id)
 
     async def setup_hook(self):
+        # No game survives a restart, so any wager still open belongs to one that died
+        # with the last process. Hand it back before anyone can start a new game.
+        refunded = self.economy.refund_open_stakes()
+        if refunded:
+            log.warning("Refunded %d wagers left open when the bot last stopped", refunded)
         setup_error_handlers(self)
         self.add_check(global_blocklist_check)  # blocks banned users from prefix commands
         for extension in EXTENSIONS:

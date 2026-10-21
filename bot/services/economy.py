@@ -115,6 +115,17 @@ class EconomyService:
                 PRIMARY KEY (user_id, achievement_id)
             )"""
         )
+        # Wagers taken for a game that hasn't settled yet. The game lives in memory,
+        # so a restart would otherwise swallow them; see refund_open_stakes.
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS open_stakes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                username TEXT,
+                amount INTEGER NOT NULL,
+                game TEXT
+            )"""
+        )
         # Upgrade older economy tables that predate later columns.
         cols = [r[1] for r in self._conn.execute("PRAGMA table_info(economy)")]
         if "title" not in cols:
@@ -130,32 +141,62 @@ class EconomyService:
         row = self._conn.execute("SELECT coins, streak FROM economy WHERE user_id = ?", (user_id,)).fetchone()
         return (row[0], row[1]) if row else (0, 0)
 
-    def add_coins(self, user_id, username, amount):
-        """Add coins (the payout faucet). Creates the row if needed."""
+    def _credit(self, user_id, username, amount):
         self._conn.execute(
             "INSERT INTO economy (user_id, username, coins) VALUES (?, ?, ?) "
             "ON CONFLICT(user_id) DO UPDATE SET username = excluded.username, coins = economy.coins + excluded.coins",
             (user_id, username, amount),
         )
+
+    def add_coins(self, user_id, username, amount):
+        """Add coins (the payout faucet). Creates the row if needed."""
+        self._credit(user_id, username, amount)
         self._conn.commit()
+
+    def _take(self, user_id, amount):
+        """Deduct ``amount`` if the user can afford it, without committing. One
+        guarded UPDATE, so nothing can slip between the balance check and the
+        deduction, even if this ever becomes async."""
+        cur = self._conn.execute(
+            "UPDATE economy SET coins = coins - ? WHERE user_id = ? AND coins >= ?", (amount, user_id, amount)
+        )
+        return cur.rowcount == 1
 
     def spend(self, user_id, amount):
-        """Deduct ``amount`` if the user can afford it. Returns True on success.
+        """Deduct ``amount`` if the user can afford it. Returns True on success."""
+        taken = self._take(user_id, amount)
+        self._conn.commit()  # even on a miss, so no write transaction is left open to block the others
+        return taken
 
-        SECURITY: this reads the balance and then writes it, which is only safe
-        because the method is synchronous and never awaits. On one event loop
-        nothing can run between the check and the deduction. If this is ever made
-        async (the aiosqlite migration noted in scores.py), two concurrent buys
-        could both pass the affordability check and overdraw the account. Move
-        the whole thing into a single guarded statement first, for example
-        ``UPDATE ... SET coins = coins - ? WHERE user_id = ? AND coins >= ?``
-        and treat rowcount 0 as "could not afford"."""
-        row = self._conn.execute("SELECT coins FROM economy WHERE user_id = ?", (user_id,)).fetchone()
-        if row is None or row[0] < amount:
-            return False
-        self._conn.execute("UPDATE economy SET coins = coins - ? WHERE user_id = ?", (amount, user_id))
+    # --- wagers that outlive a single command (duels, blackjack) ---
+    def stake(self, user_id, username, amount, game):
+        """Take a wager and record it as open until its game settles, so a restart
+        mid-game can't swallow it. Returns the stake id, or None if the user can't
+        afford it."""
+        if not self._take(user_id, amount):
+            self._conn.commit()
+            return None
+        cur = self._conn.execute(
+            "INSERT INTO open_stakes (user_id, username, amount, game) VALUES (?, ?, ?, ?)",
+            (user_id, username, amount, game),
+        )
         self._conn.commit()
-        return True
+        return cur.lastrowid
+
+    def close_stake(self, stake_id):
+        """The stake's game has paid it out or handed it back."""
+        self._conn.execute("DELETE FROM open_stakes WHERE id = ?", (stake_id,))
+        self._conn.commit()
+
+    def refund_open_stakes(self):
+        """Hand back every stake whose game never settled. Only safe at startup,
+        when no game can still be running. Returns how many were refunded."""
+        rows = self._conn.execute("SELECT user_id, username, amount FROM open_stakes").fetchall()
+        for user_id, username, amount in rows:
+            self._credit(user_id, username, amount)
+        self._conn.execute("DELETE FROM open_stakes")
+        self._conn.commit()
+        return len(rows)
 
     def top(self, limit=10):
         """Return [(username, coins), ...], richest first."""

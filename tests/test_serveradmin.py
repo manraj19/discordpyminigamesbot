@@ -24,10 +24,10 @@ def test_pinned_channel_only_starts_its_games():
     assert game_channel_block(pins, "dino", GENERAL) is None  # unpinned game, unpinned channel
 
 
-def test_admins_are_told_how_to_undo_a_block():
+def test_block_notes_never_explain_how_to_unpin():
     pins = {"connect4": {C4_ROOM}}
-    assert game_channel_block(pins, "connect4", GENERAL, ";").endswith("run `;unsetchannel connect4`.")
-    assert game_channel_block(pins, "dino", C4_ROOM, "/").endswith("run `/unsetchannel` <#1>.")
+    for note in (game_channel_block(pins, "connect4", GENERAL), game_channel_block(pins, "dino", C4_ROOM)):
+        assert "unsetchannel" not in note
 
 
 def test_non_games_and_unpinned_servers_are_never_blocked():

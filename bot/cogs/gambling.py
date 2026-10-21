@@ -83,6 +83,9 @@ class Gambling(commands.Cog):
             return
         suffix = self._wager_suffix(user, bet)
         reels = spin_slots()
+        # Pay out now, before any await: the reveal below is only for show, and a
+        # failed edit or a restart mid-spin must not cost the player their winnings.
+        result = self._slots_outcome(user, bet, reels)
         shown = ["❓", "❓", "❓"]
         message = await send(f"🎰  {'   '.join(shown)}")
         for i in range(3):
@@ -90,7 +93,6 @@ class Gambling(commands.Cog):
             shown[i] = emojis.SLOT[reels[i]]
             await message.edit(content=f"🎰  {'   '.join(shown)}")
         await asyncio.sleep(0.4)
-        result = self._slots_outcome(user, bet, reels)
         await message.edit(content=f"🎰  {'   '.join(shown)}\n{result}{suffix}")
 
     @commands.command(aliases=["slot"])

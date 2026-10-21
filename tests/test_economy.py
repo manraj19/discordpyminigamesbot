@@ -169,3 +169,54 @@ def test_service_claim_then_second_claim_is_blocked():
         assert econ.balance(7) == (BASE_DAILY, 1)
     finally:
         econ.close()
+
+
+def test_stake_takes_the_coins_and_closing_it_settles():
+    svc = _fresh_service()
+    try:
+        svc.add_coins(1, "u", 100)
+        stake = svc.stake(1, "u", 60, "duel")
+        assert stake is not None and svc.balance(1)[0] == 40
+        assert svc.stake(1, "u", 60, "duel") is None  # can't afford a second one
+        assert svc.balance(1)[0] == 40
+        svc.close_stake(stake)
+        assert svc.refund_open_stakes() == 0  # settled stakes are never refunded
+        assert svc.balance(1)[0] == 40
+    finally:
+        svc._conn.close()
+
+
+def test_open_stakes_are_refunded_after_a_restart():
+    db = os.path.join(tempfile.mkdtemp(), "econ.db")
+    svc = EconomyService(db)
+    svc.add_coins(1, "a", 100)
+    svc.add_coins(2, "b", 100)
+    svc.stake(1, "a", 50, "duel")
+    svc.stake(2, "b", 50, "duel")
+    svc.stake(1, "a", 30, "blackjack")
+    svc._conn.close()  # the process dies mid-game
+
+    svc = EconomyService(db)
+    try:
+        assert svc.balance(1)[0] == 20 and svc.balance(2)[0] == 50
+        assert svc.refund_open_stakes() == 3
+        assert svc.balance(1)[0] == 100 and svc.balance(2)[0] == 100
+        assert svc.refund_open_stakes() == 0  # and only once
+    finally:
+        svc._conn.close()
+
+
+def test_a_failed_spend_leaves_no_write_lock_behind():
+    import sqlite3
+
+    db = os.path.join(tempfile.mkdtemp(), "econ.db")
+    svc = EconomyService(db)
+    try:
+        assert not svc.spend(1, 50)  # no such user
+        assert svc.stake(1, "u", 50, "duel") is None
+        other = sqlite3.connect(db, timeout=0.5)  # another service's connection
+        other.execute("INSERT INTO economy (user_id, username, coins) VALUES (9, 'x', 1)")
+        other.commit()  # raises "database is locked" if a write transaction was left open
+        other.close()
+    finally:
+        svc._conn.close()
