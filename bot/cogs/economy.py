@@ -8,7 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core import config, emojis
+from bot.core import config, embeds, emojis
 from bot.core.rewards import RewardResult, progress_bar
 from bot.games.achievements import ACHIEVEMENTS
 from bot.games.quests import DAILY_BONUS_COINS, DAILY_BONUS_XP, next_reset
@@ -123,30 +123,34 @@ class Economy(commands.Cog):
     def _shop_embed(self, user):
         owned = set(self.bot.economy.owned_titles(user.id))
         equipped = self.bot.economy.equipped_title(user.id)
-        lines = []
-        for item_id, (name, price) in TITLES.items():
+
+        def title_line(item_id, name, price=0):
             if item_id == equipped:
-                tag = "✅ equipped"
-            elif item_id in owned:
-                tag = "owned"
-            else:
-                tag = f"{price} {emojis.COIN}"
-            lines.append(f"`{item_id}` **{name}** · {tag}")
-        for item_id, name in GRANTED_TITLES.items():
+                return f"**{name}** · ✅ wearing · `;buy none`"
             if item_id in owned:
-                tag = "✅ equipped" if item_id == equipped else "earned"
-                lines.append(f"`{item_id}` **{name}** · {tag}")
-        shield_tag = (
-            "✅ owned" if self.bot.economy.owns(user.id, "streakshield") else f"{STREAKSHIELD_PRICE} {emojis.COIN}"
-        )
-        lines.append(f"\n{emojis.SHIELD} `streakshield` **Streak Shield** · {shield_tag}")
-        return discord.Embed(
+                return f"**{name}** · yours · `;buy {item_id}`"
+            return f"**{name}** · {price:,} {emojis.COIN} · `;buy {item_id}`"
+
+        embed = discord.Embed(
             title="🛍️ Shop",
-            description="\n".join(lines)
-            + "\n\nBuy or put on a title with `;buy <id>`, and take it off with `;buy none`. Titles show on your "
-            "profile. A streak shield saves your streak the next time you miss a day (hold one at a time).",
+            description=f"You have **{self.bot.economy.balance(user.id)[0]:,}** {emojis.COIN}\n"
+            "Titles show on your profile.",
             color=discord.Color.gold(),
         )
+        embeds.add_lines_field(
+            embed, "🏷️ Titles", [title_line(item_id, name, price) for item_id, (name, price) in TITLES.items()]
+        )
+        embeds.add_lines_field(
+            embed, "🎖️ Earned titles", [title_line(i, name) for i, name in GRANTED_TITLES.items() if i in owned]
+        )
+        held = self.bot.economy.owns(user.id, "streakshield")
+        embed.add_field(
+            name="🛡️ Streak Shield",
+            value="Saves your streak the next time you miss a day. You can hold one at a time.\n"
+            + ("✅ You hold one" if held else f"{STREAKSHIELD_PRICE:,} {emojis.COIN} · `;buy streakshield`"),
+            inline=False,
+        )
+        return embed
 
     def _buy(self, user, item):
         if item == "none":
@@ -211,15 +215,17 @@ class Economy(commands.Cog):
     def _achievements_embed(self, member):
         unlocked = RewardResult(new_achievements=self.bot.award_achievements(member.id, str(member))).line()
         earned = set(self.bot.economy.earned_achievements(member.id))
-        lines = [
-            f"{'✅' if aid in earned else '🔒'} **{name}**: {desc}"
-            for aid, (name, desc, _reward, _check) in ACHIEVEMENTS.items()
-        ]
-        if unlocked:
-            lines = [unlocked, "", *lines]
+        done, left = ["**✅ Earned**"], ["**🔒 Still to earn**"]
+        for aid, (name, desc, reward, _check) in ACHIEVEMENTS.items():
+            if aid in earned:
+                done.append(f"**{name}**: {desc}")
+            else:
+                left.append(f"**{name}**: {desc} +{reward:,} {emojis.COIN}")
+        sections = [unlocked] if unlocked else []
+        sections += ["\n".join(group) for group in (done, left) if len(group) > 1]
         return discord.Embed(
             title=f"🏅 Achievements ({len(earned)}/{len(ACHIEVEMENTS)})",
-            description="\n".join(lines),
+            description="\n\n".join(sections),
             color=discord.Color.gold(),
         )
 

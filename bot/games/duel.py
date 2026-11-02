@@ -195,7 +195,7 @@ ABILITIES = {
         price=1200,
         cooldown=3,
         evade=True,
-        desc="The next hit misses, its effects too, and costs them their momentum. A second hit and wounds still land.",
+        desc="The next hit and its effects miss, and they lose their momentum. A second hit and wounds still land.",
     ),
     "unleash": Ability(
         "Unleash",

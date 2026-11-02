@@ -1,8 +1,5 @@
 """The second batch of duel abilities and gear, and the limits the catalogue must fit."""
 
-from types import SimpleNamespace
-
-from bot.cogs.duel import Duel
 from bot.games.duel import (
     ABILITIES,
     GEAR,
@@ -14,7 +11,7 @@ from bot.games.duel import (
     new_duel,
     step,
 )
-from bot.views.duel import LoadoutSelect, _status_line, rules_embed
+from bot.views.duel import LoadoutSelect, _status_line
 
 BASE = {"max_hp": 100, "max_energy": 6, "attack": 0, "defense": 0}
 
@@ -255,13 +252,6 @@ def test_catalogue_fits_discord():
     assert len(ABILITIES) - 1 <= 25  # Strike is never offered, it's always in the kit
     assert 1 + LOADOUT_SIZE <= 5
     LoadoutSelect([a for a in ABILITIES if a != "strike"], ["heavy"])
+    assert all(len(ab.desc) <= 100 for ab in ABILITIES.values())  # the loadout dropdown cuts longer text off mid-word
     assert len(GEAR) <= 25  # autocomplete shows 25 at most, so past this some items can't be found
     assert all(gear["slot"] in ("weapon", "armor", "accessory") for gear in GEAR.values())
-
-
-def test_rules_and_shop_fit_in_one_embed():
-    duel = SimpleNamespace(owned_gear=lambda _: [], gear_levels=lambda _: {}, unlocked_abilities=lambda _: [])
-    shop = Duel._shop_embed(SimpleNamespace(bot=SimpleNamespace(duel=duel)), SimpleNamespace(id=1))
-    for embed in (rules_embed(), shop):
-        assert len(embed) <= 6000
-        assert all(len(field.value) <= 1024 for field in embed.fields)

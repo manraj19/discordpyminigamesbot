@@ -20,6 +20,11 @@ MAX_TEAM_NAME = 40  # team names go into embed titles and field names (256 at mo
 MAX_PLAYER_NAME = 25  # keeps the scorecard tables under the 1024-character field limit
 
 
+def _table(rows, headers, **options):
+    """A scorecard table for an embed field."""
+    return f"```\n{tabulate(rows, headers=headers, tablefmt='simple', floatfmt='.1f', **options)}\n```"
+
+
 class Cricket(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -170,24 +175,16 @@ class Cricket(commands.Cog):
         embed = discord.Embed(title="📊 Match Summary", color=0x1F8B4C)
         embed.add_field(name="Result", value=result, inline=False)
         embed.add_field(
-            name=f"{bat_name}: {runs1}/{wickets1} ({overs1} ov)",
-            value=f"```\n{tabulate(tb1, headers=bat_headers, tablefmt='grid')}\n```",
-            inline=False,
+            name=f"{bat_name}: {runs1}/{wickets1} ({overs1} ov)", value=_table(tb1, bat_headers), inline=False
         )
         embed.add_field(
-            name=f"Top bowlers ({bowl_name})",
-            value=f"```\n{tabulate(bw1, headers=bowl_headers, tablefmt='grid', disable_numparse=[1])}\n```",
-            inline=False,
+            name=f"Top bowlers ({bowl_name})", value=_table(bw1, bowl_headers, disable_numparse=[1]), inline=False
         )
         embed.add_field(
-            name=f"{bowl_name}: {runs2}/{wickets2} ({overs2} ov)",
-            value=f"```\n{tabulate(tb2, headers=bat_headers, tablefmt='grid')}\n```",
-            inline=False,
+            name=f"{bowl_name}: {runs2}/{wickets2} ({overs2} ov)", value=_table(tb2, bat_headers), inline=False
         )
         embed.add_field(
-            name=f"Top bowlers ({bat_name})",
-            value=f"```\n{tabulate(bw2, headers=bowl_headers, tablefmt='grid', disable_numparse=[1])}\n```",
-            inline=False,
+            name=f"Top bowlers ({bat_name})", value=_table(bw2, bowl_headers, disable_numparse=[1]), inline=False
         )
         await channel.send(embed=embed)
 

@@ -8,6 +8,9 @@ import discord
 from bot.core import emojis
 from bot.core.checks import is_blocked
 from bot.games.duel import ABILITIES, DRAW, LOADOUT_SIZE, ai_choose, available_moves, step
+from bot.views.pages import PagedView, chunked
+
+RULES_PAGE_SIZE = 9  # abilities on one page of the rules
 
 _STYLE = {
     "strike": discord.ButtonStyle.danger,
@@ -38,49 +41,69 @@ _STYLE = {
 }
 
 
-def add_lines_field(embed, name, lines):
-    """Add lines as one or more embed fields, splitting at Discord's 1024-char
-    field limit. Continuation fields get a blank name so they read as one block."""
-    chunk = []
-    field_name = name
-    for line in lines:
-        if sum(len(x) + 1 for x in chunk) + len(line) > 1024:
-            embed.add_field(name=field_name, value="\n".join(chunk), inline=False)
-            chunk, field_name = [], "​"
-        chunk.append(line)
-    if chunk:
-        embed.add_field(name=field_name, value="\n".join(chunk), inline=False)
+def ability_heading(ab):
+    """An ability's name with its energy cost and cooldown, e.g. ``Drain (3⚡, CD 2)``."""
+    cost = "free" if ab.cost == 0 else f"{ab.cost}⚡"
+    cooldown = f", CD {ab.cooldown}" if ab.cooldown else ""
+    return f"{ab.name} ({cost}{cooldown})"
 
 
-def rules_embed():
-    embed = discord.Embed(
+def rules_pages():
+    """The Rules button's pages, as ``(name, embed)``."""
+    color = discord.Color.dark_red()
+    basics = discord.Embed(
         title="⚔️ How duels work",
-        color=discord.Color.dark_red(),
-        description=(
-            "Duels are turn-based and **deterministic**, so wins come from your decisions, not luck. Each "
-            "fighter has **HP** and **energy** (you regain 1 each turn). Spend energy on abilities and drop "
-            "your opponent to 0 HP.\n\n"
-            f"**Status effects:** {emojis.BLEED} bleed and {emojis.POISON} poison deal damage at the start of "
-            f"your turns · {emojis.SHIELD} shield soaks damage · {emojis.STUN} stun skips your next turn · "
-            "🔻 weaken lowers attack · 🔺 sharpen raises it · 🎯 exposed means every hit on you deals more · "
-            "💨 sidestep makes the next hit miss · 🪶 a Phoenix Charm that hasn't saved you yet.\n\n"
-            "🔥 **Momentum:** every turn you land damage adds a stack (+2 attack each, up to 5). Playing "
-            "Guard or Mend resets it, so turtling costs you your ramp. Some abilities also have a "
-            "**cooldown** (CD) of a few turns after use.\n\n"
-            "Whoever goes second in a duel between players starts with 2 extra energy, since going first is "
-            "a real edge.\n\n"
-            "Each level adds HP up to level 20. In ranked, everyone fights with level 20 HP.\n\n"
-            "Your kit is **Strike** (always available) plus your loadout. Buy gear and abilities in "
-            "`;duelshop`, equip with `;equip`, and set your loadout with `;loadout`."
+        color=color,
+        description="Duels are turn-based and **deterministic**, so wins come from your decisions, not luck. "
+        "Spend energy on abilities and drop your opponent to 0 HP.",
+    )
+    for name, value in (
+        (
+            "⚡ Energy",
+            "You regain 1 each turn. Whoever goes second in a duel between players starts with 2 extra, since "
+            "going first is a real edge.",
+        ),
+        (
+            "🔥 Momentum",
+            "Every turn you land damage adds a stack (+2 attack each, up to 5). Playing Guard or Mend resets it, "
+            "so turtling costs you your ramp.",
+        ),
+        ("⏳ Cooldowns", "Some abilities need a few turns (CD) before you can use them again."),
+        ("❤️ Levels", "Each level adds HP up to level 20. In ranked, everyone fights with level 20 HP."),
+        (
+            "🎒 Your kit",
+            "**Strike** is always available, plus your loadout. Buy gear and abilities in `;duelshop`, equip with "
+            "`;equip`, and set your loadout with `;loadout`.",
+        ),
+    ):
+        basics.add_field(name=name, value=value, inline=False)
+
+    icons = discord.Embed(
+        title="⚔️ What the icons mean",
+        color=color,
+        description="\n".join(
+            (
+                f"{emojis.BLEED} **Bleed** and {emojis.POISON} **poison** deal damage at the start of your turns",
+                f"{emojis.SHIELD} **Shield** soaks damage",
+                f"{emojis.STUN} **Stun** skips your next turn",
+                "🔻 **Weaken** lowers attack",
+                "🔺 **Sharpen** raises it",
+                "🔥 **Momentum** adds attack",
+                "🎯 **Exposed** means every hit on you deals more",
+                "💨 **Sidestep** makes the next hit miss",
+                "↩️ **Riposte** hits back if your shield blocks anything",
+                "🪶 A **Phoenix Charm** that hasn't saved you yet",
+            )
         ),
     )
-    lines = []
-    for ab in ABILITIES.values():
-        cost = "free" if ab.cost == 0 else f"{ab.cost}⚡"
-        cd = f", CD {ab.cooldown}" if ab.cooldown else ""
-        lines.append(f"**{ab.name}** ({cost}{cd}): {ab.desc}")
-    add_lines_field(embed, "Abilities", lines)
-    return embed
+
+    pages = [("How duels work", basics), ("Icons", icons)]
+    for part, group in enumerate(chunked(list(ABILITIES.values()), RULES_PAGE_SIZE), 1):
+        embed = discord.Embed(title="⚔️ Abilities", color=color)
+        for ab in group:
+            embed.add_field(name=ability_heading(ab), value=ab.desc, inline=False)
+        pages.append((f"Abilities {part}", embed))
+    return pages
 
 
 def _status_line(c):
@@ -132,7 +155,7 @@ class RulesButton(discord.ui.Button):
         super().__init__(label="Rules", style=discord.ButtonStyle.secondary, row=1)
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_message(embed=rules_embed(), ephemeral=True)
+        await PagedView(interaction.user.id, rules_pages()).send(interaction, ephemeral=True)
 
 
 class DuelView(discord.ui.View):
@@ -281,7 +304,7 @@ class LoadoutSelect(discord.ui.Select):
     def __init__(self, unlocked, current):
         options = [
             discord.SelectOption(
-                label=ABILITIES[a].name, value=a, description=ABILITIES[a].desc[:100], default=a in current
+                label=ability_heading(ABILITIES[a]), value=a, description=ABILITIES[a].desc[:100], default=a in current
             )
             for a in unlocked
         ]

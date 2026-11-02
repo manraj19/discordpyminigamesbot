@@ -15,6 +15,9 @@ from bot.games.achievements import ACHIEVEMENTS
 from bot.games.duel import XP_PER_LEVEL
 from bot.services.economy import title_name
 from bot.services.scores import SUPPORTED_GAMES, game_title
+from bot.views.pages import PagedView
+
+MAX_DEFINITIONS = 8  # on a page of ;define, so a word with dozens of senses stays readable
 
 
 def _clip(text, limit=1024):
@@ -34,29 +37,35 @@ class Utility(commands.Cog):
     async def _define(self, word):
         url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(word, safe='')}"
         status, data = await self.bot.http_client.fetch_json(url)
-        if status != 200 or not data or isinstance(data, dict):
+        if status != 200 or not data or isinstance(data, dict) or not data[0]["meanings"]:
             return f"No definition found for '{word[:100]}'.", None
 
-        embed = discord.Embed(title=f"Definition of {word[:100]}", color=0x7289DA)
-        for meaning in data[0]["meanings"][:5]:  # five full fields still fit an embed's 6000 limit
-            definitions_text = "\n".join(d["definition"] for d in meaning["definitions"])
-            embed.add_field(name=meaning["partOfSpeech"], value=_clip(definitions_text), inline=False)
-        embed.set_footer(text="🤓")
-        return None, embed
+        pages = []
+        for meaning in data[0]["meanings"]:
+            part = meaning["partOfSpeech"]
+            senses = (f"{i}. {d['definition']}" for i, d in enumerate(meaning["definitions"][:MAX_DEFINITIONS], 1))
+            embed = discord.Embed(
+                title=f"Definition of {word[:100]}",
+                description=_clip(f"**{part}**\n" + "\n".join(senses), 4000),
+                color=0x7289DA,
+            )
+            embed.set_footer(text="🤓")
+            pages.append((part, embed))
+        return None, pages
 
     @commands.command(aliases=["def"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def define(self, ctx, *, word: str):
-        error, embed = await self._define(word)
-        await (ctx.send(error) if error else ctx.send(embed=embed))
+        error, pages = await self._define(word)
+        await (ctx.send(error) if error else PagedView(ctx.author.id, pages).send(ctx))
 
     @app_commands.command(name="define", description="Define a word")
     @app_commands.describe(word="The word to define")
     @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
     async def define_slash(self, interaction: discord.Interaction, word: str):
         await interaction.response.defer()
-        error, embed = await self._define(word)
-        await (interaction.followup.send(error) if error else interaction.followup.send(embed=embed))
+        error, pages = await self._define(word)
+        await (interaction.followup.send(error) if error else PagedView(interaction.user.id, pages).send(interaction))
 
     # --- urban dictionary ---
     async def _urban(self, term):
@@ -65,30 +74,33 @@ class Utility(commands.Cog):
         if status != 200 or not data or not data.get("list"):
             return f"No definition found for '{term[:100]}'.", None
 
-        embed = discord.Embed(title=f"Urban Dictionary: {term[:100]}", color=0x7289DA)
-        for i, definition in enumerate(data["list"][:5], 1):  # these clips keep all five under the 6000 limit
-            embed.add_field(
-                name=f"Definition {i}", value=_urban_text(definition["definition"], 600) or "?", inline=False
+        pages = []
+        for i, definition in enumerate(data["list"][:5], 1):
+            embed = discord.Embed(
+                title=f"Urban Dictionary: {term[:100]}",
+                description=_urban_text(definition["definition"], 2000) or "?",
+                color=0x7289DA,
             )
-            example = _urban_text(definition["example"], 400)
+            example = _urban_text(definition["example"], 1000)
             if example:
                 embed.add_field(name="Example", value=example, inline=False)
-        embed.set_footer(text="If this shows something offensive, it's not my fault. Blame Urban Dictionary.")
-        return None, embed
+            embed.set_footer(text="If this shows something offensive, it's not my fault. Blame Urban Dictionary.")
+            pages.append((f"Definition {i}", embed))
+        return None, pages
 
     @commands.command(aliases=["urban"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def urbandictionary(self, ctx, *, term: str):
-        error, embed = await self._urban(term)
-        await (ctx.send(error) if error else ctx.send(embed=embed))
+        error, pages = await self._urban(term)
+        await (ctx.send(error) if error else PagedView(ctx.author.id, pages).send(ctx))
 
     @app_commands.command(name="urbandictionary", description="Get a word's definition from Urban Dictionary")
     @app_commands.describe(term="The term to look up")
     @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
     async def urban_slash(self, interaction: discord.Interaction, term: str):
         await interaction.response.defer()
-        error, embed = await self._urban(term)
-        await (interaction.followup.send(error) if error else interaction.followup.send(embed=embed))
+        error, pages = await self._urban(term)
+        await (interaction.followup.send(error) if error else PagedView(interaction.user.id, pages).send(interaction))
 
     # --- leaderboard (global by default, opt-in per server) ---
     def _leaderboard(self, game, guild_id):
@@ -132,13 +144,6 @@ class Utility(commands.Cog):
         if title_id:
             embed.description = f"## 🏅 {title_name(title_id)}"
         embed.set_thumbnail(url=user.display_avatar.url)
-        for game in SUPPORTED_GAMES:
-            score = self.bot.scores.user_score(user.id, game)
-            if score is None:
-                value = "Score: N/A\nRank: N/A"
-            else:
-                value = f"Score: {score}\nRank: {self.bot.scores.rank(game, score)}"
-            embed.add_field(name=game_title(game), value=value, inline=True)
         rec = self.bot.duel.get_or_create(user.id, str(user))
         into = rec["xp"] % XP_PER_LEVEL
         embed.add_field(
@@ -154,6 +159,15 @@ class Utility(commands.Cog):
         )
         earned = len(self.bot.economy.earned_achievements(user.id))
         embed.add_field(name="🏅 Achievements", value=f"{earned}/{len(ACHIEVEMENTS)}", inline=True)
+        scores = ((game, self.bot.scores.user_score(user.id, game)) for game in SUPPORTED_GAMES)
+        played = [
+            f"**{game_title(game)}**: {score:,} · rank #{self.bot.scores.rank(game, score):,}"
+            for game, score in scores
+            if score is not None
+        ]
+        embed.add_field(
+            name="🎮 Game scores", value="\n".join(played) or "Nothing yet. `;help` lists the games.", inline=False
+        )
         if unlocked:
             embed.add_field(name="🎉 Just unlocked", value=unlocked, inline=False)
         embed.set_footer(text="Stats across all servers · gear and loadout in ;duelist")

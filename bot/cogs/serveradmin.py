@@ -17,7 +17,6 @@ from discord.ext import commands
 from bot.cogs.help import GAMES
 from bot.core import config, embeds
 from bot.core.checks import join_and, live_pins, mention_all
-from bot.views.duel import add_lines_field
 
 
 async def _game_autocomplete(interaction, current):
@@ -190,8 +189,10 @@ class ServerAdmin(commands.Cog):
             )
             return
         embed = embeds.branded(title="📌 Channel settings")
-        add_lines_field(embed, "Pinned games", [f"`{g}`: {mention_all(chans)}" for g, chans in sorted(pins.items())])
-        add_lines_field(embed, "Turned off in", [f"<#{c}>" for c in off])
+        embeds.add_lines_field(
+            embed, "Pinned games", [f"`{g}`: {mention_all(chans)}" for g, chans in sorted(pins.items())]
+        )
+        embeds.add_lines_field(embed, "Turned off in", [f"<#{c}>" for c in off])
         await ctx.send(embed=embed)
 
     @commands.Cog.listener()

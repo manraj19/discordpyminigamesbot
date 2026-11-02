@@ -36,7 +36,8 @@ from bot.games.duel import (
     wager_prize,
 )
 from bot.services.economy import title_name
-from bot.views.duel import DuelChallengeView, DuelView, LoadoutView, add_lines_field
+from bot.views.duel import DuelChallengeView, DuelView, LoadoutView, ability_heading
+from bot.views.pages import PagedView, chunked
 
 CASUAL_WIN_COINS = 20
 CASUAL_WIN_XP = 15
@@ -48,10 +49,38 @@ RANKED_STREAK_FIRE = 3  # ranked win streak that earns a 🔥 on the leaderboard
 ARENA_WIN_XP = 20
 ARENA_LOSS_XP = 5
 ARENA_TITLE_FLOORS = {10: "towerbreaker", 25: "ascendant"}  # floor -> granted title id
+SHOP_PAGE_SIZE = 8  # items on one page of ;duelshop, so a page fits a screen
+SHOP_SLOTS = (("weapon", "Weapons"), ("armor", "Armor"), ("accessory", "Accessories"))
+STAT_NAMES = {"attack": "attack", "defense": "defense", "max_hp": "HP", "max_energy": "energy"}
+ENHANCE_PER_LEVEL = {"weapon": "+1 attack", "armor": "+1 defense", "accessory": "+4 max HP"}
 
 
 def _attempts(count):
     return f"{count} attempt" + ("" if count == 1 else "s")
+
+
+def _shop_gear_field(item_id, gear, owned, equipped, level):
+    """A piece of gear as a shop entry: what it does, where you stand with it, and
+    the command that comes next."""
+    stats = ", ".join(f"{gear[key]:+d} {name}" for key, name in STAT_NAMES.items() if key in gear)
+    plus = f" +{level}" if level else ""
+    if item_id in equipped:
+        state = f"✅ Equipped{plus}" + (f" · `;enhance {item_id}`" if level < ENHANCE_MAX else "")
+    elif item_id in owned:
+        state = f"✅ Owned{plus} · `;equip {item_id}`"
+    else:
+        state = f"{gear['price']:,} {emojis.COIN} · `;buygear {item_id}`"
+    return gear["name"], " · ".join(filter(None, [stats, gear.get("desc")])) + f"\n{state}"
+
+
+def _shop_ability_field(ability_id, ab, unlocked, loadout):
+    if ability_id in loadout:
+        state = "✅ In your loadout"
+    elif ability_id in unlocked:
+        state = "✅ Unlocked · `;loadout`"
+    else:
+        state = f"{ab.price:,} {emojis.COIN} · `;buyability {ability_id}`"
+    return ability_heading(ab), f"{ab.desc}\n{state}"
 
 
 def _matching(current, options):
@@ -301,34 +330,51 @@ class Duel(commands.Cog):
         embed.set_footer(text="Overall stats and per-game scores in ;profile")
         return embed
 
-    def _shop_embed(self, member):
-        owned = set(self.bot.duel.owned_gear(member.id))
+    def _shop_pages(self, member):
+        """``;duelshop`` as ``(name, embed)``: a page for each gear slot, then the
+        abilities by what they do, cheapest first."""
+        rec = self.bot.duel.get_or_create(member.id, str(member))
         levels = self.bot.duel.gear_levels(member.id)
+        owned = set(self.bot.duel.owned_gear(member.id))
+        equipped = {rec["weapon"], rec["armor"], rec["accessory"]}
+        sections = [
+            (
+                label,
+                f"You wear one at a time. Each `;enhance` level adds {ENHANCE_PER_LEVEL[slot]}.",
+                [
+                    _shop_gear_field(gid, gear, owned, equipped, levels.get(gid, 0))
+                    for gid, gear in GEAR.items()
+                    if gear["slot"] == slot
+                ],
+            )
+            for slot, label in SHOP_SLOTS
+        ]
+
         unlocked = set(self.bot.duel.unlocked_abilities(member.id))
-        gear_lines = []
-        for gid, g in GEAR.items():
-            stat_bits = " ".join(
-                f"{v:+d} {k.replace('max_', '')}"
-                for k, v in g.items()
-                if k in ("attack", "defense", "max_hp", "max_energy")
-            )
-            bits = " · ".join(filter(None, [stat_bits, g.get("desc")]))
-            tag = (
-                f"✅ owned{f' +{levels[gid]}' if levels.get(gid) else ''}"
-                if gid in owned
-                else f"{g['price']} {emojis.COIN}"
-            )
-            gear_lines.append(f"`{gid}` {g['name']} ({g['slot']}) · {bits} · {tag}")
-        abil_lines = []
-        for aid, ab in ABILITIES.items():
-            if ab.price <= 0:
-                continue
-            tag = "✅ unlocked" if aid in unlocked else f"{ab.price} {emojis.COIN}"
-            abil_lines.append(f"`{aid}` {ab.name}: {ab.desc} · {tag}")
-        embed = discord.Embed(title="🛒 Duel Shop", color=discord.Color.dark_red())
-        add_lines_field(embed, "Gear · `;buygear <id>`, `;equip <id>`, upgrade with `;enhance <id>`", gear_lines)
-        add_lines_field(embed, "Abilities · `;buyability <id>` then `;loadout`", abil_lines)
-        return embed
+        buyable = sorted((item for item in ABILITIES.items() if item[1].price), key=lambda item: item[1].price)
+        for label, attacks in (("Attack abilities", True), ("Support abilities", False)):
+            fields = [
+                _shop_ability_field(aid, ab, unlocked, rec["loadout"])
+                for aid, ab in buyable
+                if bool(ab.damage or ab.rupture) is attacks
+            ]
+            hint = "Pick up to 4 with `;loadout`. ⚡ is the energy cost, and CD is the turns it needs to recharge."
+            sections.append((label, hint, fields))
+
+        coins = self.bot.economy.balance(member.id)[0]
+        pages = []
+        for label, hint, fields in sections:
+            for part, group in enumerate(chunked(fields, SHOP_PAGE_SIZE), 1):
+                name = label if part == 1 else f"{label} {part}"
+                embed = discord.Embed(
+                    title=f"🛒 Duel Shop · {name}",
+                    description=f"You have **{coins:,}** {emojis.COIN}\n{hint}",
+                    color=discord.Color.dark_red(),
+                )
+                for field_name, value in group:
+                    embed.add_field(name=field_name, value=value, inline=False)
+                pages.append((name, embed))
+        return pages
 
     def _rank_embed(self):
         rows = self.bot.duel.top(10)
@@ -429,12 +475,14 @@ class Duel(commands.Cog):
         await interaction.response.send_message(embed=self._duelist_embed(member or interaction.user))
 
     @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def duelshop(self, ctx):
-        await ctx.send(embed=self._shop_embed(ctx.author))
+        await PagedView(ctx.author.id, self._shop_pages(ctx.author)).send(ctx)
 
     @app_commands.command(name="duelshop", description="Browse duel gear and abilities")
+    @app_commands.checks.cooldown(1, 3, key=lambda i: i.user.id)
     async def duelshop_slash(self, interaction: discord.Interaction):
-        await interaction.response.send_message(embed=self._shop_embed(interaction.user))
+        await PagedView(interaction.user.id, self._shop_pages(interaction.user)).send(interaction)
 
     @commands.command(aliases=["duelboard"])
     async def duelrank(self, ctx):
@@ -483,8 +531,7 @@ class Duel(commands.Cog):
         if not self.bot.economy.spend(user.id, cost, "enhance"):
             return f"Enhancing to **+{level + 1}** costs **{cost}** MiniCoins. Earn some more first."
         new_level = self.bot.duel.enhance_gear(user.id, item)
-        slot = GEAR[item]["slot"]
-        per = {"weapon": "+1 attack", "armor": "+1 defense", "accessory": "+4 max HP"}[slot]
+        per = ENHANCE_PER_LEVEL[GEAR[item]["slot"]]
         msg = f"🔨 **{GEAR[item]['name']} +{new_level}** ({per} per level)."
         if new_level < ENHANCE_MAX:
             msg += f" Next level costs {enhance_cost(new_level)} {emojis.COIN}."
