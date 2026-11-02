@@ -16,6 +16,8 @@ from bot.games.cricket import get_top_performers, simulate_innings
 HAND_CRICKET_OPTIONS = [1, 2, 3, 4, 6]
 PACE_NORMAL = 1.4  # seconds between ordinary deliveries in the live replay
 PACE_BIG = 2.2  # seconds to linger on wickets and milestones
+MAX_TEAM_NAME = 40  # team names go into embed titles and field names (256 at most)
+MAX_PLAYER_NAME = 25  # keeps the scorecard tables under the 1024-character field limit
 
 
 class Cricket(commands.Cog):
@@ -65,13 +67,16 @@ class Cricket(commands.Cog):
         """Build a balanced XI: 6 specialist batsmen up top, 5 bowlers at the tail."""
         bats = [n for n in CRICKET_BATSMEN if n not in exclude]
         bowls = [n for n in CRICKET_BOWLERS if n not in exclude]
-        if len(bats) < 6 or len(bowls) < 5:
-            return None
         return random.sample(bats, 6) + random.sample(bowls, 5)
 
     # --- simulate ---
+    async def _team_name(self, channel, author, number):
+        msg = await self._prompt(channel, author, f"Enter the name of Team {number}:", valid=str.strip)
+        return msg and msg.content.strip()[:MAX_TEAM_NAME]
+
     async def _team_prompt(self, channel, author, team_name, exclude=()):
-        """Prompt for an XI (or 'fill'). Returns the player list, or None."""
+        """Prompt for an XI (or 'fill'). Returns the player list, or None. Anything
+        short of 11 distinct names gets topped up, since the simulator needs a full side."""
         msg = await self._prompt(
             channel,
             author,
@@ -81,27 +86,30 @@ class Cricket(commands.Cog):
         if msg is None:
             return None
         if msg.content.lower().strip() == "fill":
-            team = self._fill_team(exclude=exclude)
-            if team is None:
-                await channel.send("Not enough names left in the roster to fill a side. Type the 11 names yourself.")
+            return self._fill_team(exclude=exclude)
+        names = (p.strip()[:MAX_PLAYER_NAME] for p in msg.content.split(","))
+        team = list(dict.fromkeys(n for n in names if n))[:11]
+        if len(team) == 11:
             return team
-        return [p.strip() for p in msg.content.split(",")]
+        filler = self._fill_team(exclude=[*exclude, *team])[len(team) :]
+        await channel.send(f"That's {len(team)} different names, so I filled in the rest: {', '.join(filler)}.")
+        return team + filler
 
     async def _simulate(self, channel, author):
         await self.bot.play(channel, [author], lambda: self._run_simulate(channel, author))
 
     async def _run_simulate(self, channel, author):
-        team1_name = await self._prompt(channel, author, "Enter the name of Team 1:")
+        team1_name = await self._team_name(channel, author, 1)
         if team1_name is None:
             return
-        team1 = await self._team_prompt(channel, author, team1_name.content)
+        team1 = await self._team_prompt(channel, author, team1_name)
         if team1 is None:
             return
 
-        team2_name = await self._prompt(channel, author, "Enter the name of Team 2:")
+        team2_name = await self._team_name(channel, author, 2)
         if team2_name is None:
             return
-        team2 = await self._team_prompt(channel, author, team2_name.content, exclude=team1)
+        team2 = await self._team_prompt(channel, author, team2_name, exclude=team1)
         if team2 is None:
             return
 
@@ -116,19 +124,19 @@ class Cricket(commands.Cog):
         overs = int(overs_message.content)
         max_overs_per_bowler = overs // 5  # each bowler is capped at a fifth of the innings
 
-        toss_winner = random.choice([team1_name.content, team2_name.content])
+        toss_winner = random.choice([team1_name, team2_name])
         await channel.send(f"{emojis.COIN} **{toss_winner}** won the toss and chose to bat first!")
         await asyncio.sleep(1.5)
 
-        if toss_winner == team1_name.content:
+        if toss_winner == team1_name:
             batting_team, bowling_team = team1, team2
-            bat_name, bowl_name = team1_name.content, team2_name.content
+            bat_name, bowl_name = team1_name, team2_name
         else:
             batting_team, bowling_team = team2, team1
-            bat_name, bowl_name = team2_name.content, team1_name.content
+            bat_name, bowl_name = team2_name, team1_name
 
         # --- First innings (played out live) ---
-        runs1, wickets1, scores1, wkts1, events1, _c1, overs1, balls1, bowling1 = simulate_innings(
+        runs1, wickets1, scores1, wkts1, events1, overs1, balls1, bowling1 = simulate_innings(
             batting_team, bowling_team, overs, max_overs_per_bowler
         )
         await self._replay(channel, bat_name, 1, events1)
@@ -140,7 +148,7 @@ class Cricket(commands.Cog):
         await asyncio.sleep(2)
 
         # --- Second innings (the chase, played out live) ---
-        runs2, wickets2, scores2, wkts2, events2, _chased, overs2, balls2, bowling2 = simulate_innings(
+        runs2, wickets2, scores2, wkts2, events2, overs2, balls2, bowling2 = simulate_innings(
             bowling_team, batting_team, overs, max_overs_per_bowler, target=runs1
         )
         await self._replay(channel, bowl_name, 2, events2, target=runs1)
@@ -213,6 +221,8 @@ class Cricket(commands.Cog):
             """Play one innings and return its score, or None if the player went quiet.
             A chase ends as soon as it passes ``target``."""
             score = 0
+            shots = []
+            whose = "Your" if you_bat else "Bot's"
             while target is None or score <= target:
                 try:
                     message = await self.bot.wait_for("message", check=check, timeout=30.0)
@@ -220,20 +230,27 @@ class Cricket(commands.Cog):
                     await channel.send("You took too long to respond. Game over.")
                     return None
                 user_choice = int(message.content)
-                bot_choice = random.choice(HAND_CRICKET_OPTIONS)
-                await channel.send(f"You chose {user_choice}, Bot chose {bot_choice}")
+                # The bot bowls at your recent shots, so spamming 6 stops being the best
+                # plan: always 6 won 60% of games before this and wins 48% now, while
+                # mixing it up wins 53 to 56%.
+                bot_choice = random.choice(HAND_CRICKET_OPTIONS + (shots[-3:] if you_bat else []))
+                shots.append(user_choice)
+                played = f"You chose {user_choice}, Bot chose {bot_choice}."
                 if user_choice == bot_choice:
-                    whose = "Your" if you_bat else "Bot's"
-                    await channel.send(f"Out! {whose} score: {score}")
+                    await channel.send(f"{played} Out! {whose} score: {score}")
                     break
                 score += user_choice if you_bat else bot_choice
+                chase = f" · **{target + 1 - score}** to win" if target is not None and score <= target else ""
+                await channel.send(f"{played} {whose} score: **{score}**{chase}")
             return score
 
         await channel.send("First Half: You are batting. Type a number (1, 2, 3, 4, 6) to play your shot.")
         user_score = await innings(you_bat=True)
         if user_score is None:
             return
-        await channel.send("Second Half: Bot is batting. Type a number (1, 2, 3, 4, 6) to bowl.")
+        await channel.send(
+            f"Second Half: Bot is batting and needs **{user_score + 1}** to win. Type a number (1, 2, 3, 4, 6) to bowl."
+        )
         bot_score = await innings(you_bat=False, target=user_score)
         if bot_score is None:
             return

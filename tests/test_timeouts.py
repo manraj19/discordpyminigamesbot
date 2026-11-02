@@ -12,14 +12,18 @@ class _Wallet:
     def __init__(self):
         self.credits = []
 
-    def add_coins(self, user_id, username, amount):
+    def add_coins(self, user_id, username, amount, source="other"):
         self.credits.append(amount)
+
+
+def _bot(wallet):
+    return SimpleNamespace(economy=wallet, wager_line=lambda *args: "")
 
 
 def test_blackjack_timeout_stands_instead_of_refunding():
     async def scenario():
         wallet = _Wallet()
-        view = BlackjackView(SimpleNamespace(id=1), bot=SimpleNamespace(economy=wallet), bet=100)
+        view = BlackjackView(SimpleNamespace(id=1), bot=_bot(wallet), bet=100)
         view.player_hand, view.dealer_hand = [10, 5], [10, 7]  # 15 against the dealer's 17
         await view.on_timeout()
         return wallet.credits, view.settled
@@ -32,7 +36,7 @@ def test_blackjack_timeout_stands_instead_of_refunding():
 def test_blackjack_timeout_still_pays_a_winning_hand():
     async def scenario():
         wallet = _Wallet()
-        view = BlackjackView(SimpleNamespace(id=1), bot=SimpleNamespace(economy=wallet), bet=100)
+        view = BlackjackView(SimpleNamespace(id=1), bot=_bot(wallet), bet=100)
         view.player_hand, view.dealer_hand = [10, 9], [10, 7]  # 19 against 17
         await view.on_timeout()
         return wallet.credits

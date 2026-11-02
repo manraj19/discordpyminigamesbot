@@ -18,11 +18,3 @@ def branded(title=None, description=None, color=None):
     )
     embed.set_footer(text=config.FOOTER_TEXT)
     return embed
-
-
-def error(description, title="Error"):
-    return branded(title=title, description=description, color=config.ERROR_COLOR)
-
-
-def success(description, title=None):
-    return branded(title=title, description=description, color=config.SUCCESS_COLOR)

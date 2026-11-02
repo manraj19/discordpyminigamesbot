@@ -20,7 +20,10 @@ from bot.games.duel import (
     ARENA_DAILY_CAP,
     ENHANCE_MAX,
     GEAR,
+    HP_LEVEL_CAP,
     RANK_MAX_GAP,
+    SECOND_MOVER_ENERGY,
+    WAGER_RAKE_PERCENT,
     aggregate_stats,
     arena_opponent,
     arena_reward,
@@ -30,9 +33,10 @@ from bot.games.duel import (
     make_combatant,
     new_duel,
     ranked_k,
+    wager_prize,
 )
 from bot.services.economy import title_name
-from bot.views.duel import DuelChallengeView, DuelView, LoadoutView, add_lines_field, rules_embed
+from bot.views.duel import DuelChallengeView, DuelView, LoadoutView, add_lines_field
 
 CASUAL_WIN_COINS = 20
 CASUAL_WIN_XP = 15
@@ -46,6 +50,31 @@ ARENA_LOSS_XP = 5
 ARENA_TITLE_FLOORS = {10: "towerbreaker", 25: "ascendant"}  # floor -> granted title id
 
 
+def _attempts(count):
+    return f"{count} attempt" + ("" if count == 1 else "s")
+
+
+def _matching(current, options):
+    """Autocomplete: up to 25 ``(value, label)`` options with ``current`` in either."""
+    current = current.lower()
+    matches = (o for o in options if current in o[0] or current in o[1].lower())
+    return [app_commands.Choice(name=label, value=value) for value, label in matches][:25]
+
+
+async def _gear_choices(interaction, current):
+    return _matching(current, [(gid, f"{g['name']} ({g['price']} MiniCoins)") for gid, g in GEAR.items()])
+
+
+async def _owned_gear_choices(interaction, current):
+    owned = interaction.client.duel.owned_gear(interaction.user.id)
+    return _matching(current, [(gid, GEAR[gid]["name"]) for gid in owned if gid in GEAR])
+
+
+async def _ability_choices(interaction, current):
+    buyable = [(aid, f"{ab.name} ({ab.price} MiniCoins)") for aid, ab in ABILITIES.items() if ab.price]
+    return _matching(current, buyable)
+
+
 class Duel(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -54,20 +83,21 @@ class Duel(commands.Cog):
         self.in_arena = set()
 
     # --- shared helpers ---
-    def _fighter(self, member, name=None):
+    def _fighter(self, member, ranked=False):
         rec = self.bot.duel.get_or_create(member.id, str(member))
         levels = self.bot.duel.gear_levels(member.id)
-        stats = aggregate_stats(rec["level"], rec["weapon"], rec["armor"], rec["accessory"], levels)
-        return make_combatant(name or member.display_name, stats, rec["loadout"]), rec
+        level = HP_LEVEL_CAP if ranked else rec["level"]  # a level only ever adds HP, so ranked ignores time played
+        stats = aggregate_stats(level, rec["weapon"], rec["armor"], rec["accessory"], levels)
+        return make_combatant(member.display_name, stats, rec["loadout"]), rec
 
     def _return_stakes(self, players, bet, stakes):
         """Hand each player's wager back and close their stake. ``stakes`` can be
         shorter than ``players`` when someone couldn't cover the bet."""
         for player, stake in zip(players, stakes, strict=False):
-            self.bot.economy.add_coins(player.id, str(player), bet)
+            self.bot.economy.add_coins(player.id, str(player), bet, "wager")
             self.bot.economy.close_stake(stake)
 
-    async def _settle(self, channel, players, records, mode, bet, widx, stakes):
+    async def _settle(self, channel, players, mode, bet, widx, stakes):
         if widx == "draw":  # the turn cap hit with nobody ahead
             self._return_stakes(players, bet, stakes)
             note = f" The {bet}-MiniCoin wagers were refunded." if stakes else ""
@@ -75,12 +105,12 @@ class Duel(commands.Cog):
             return
         winner, loser = players[widx], players[1 - widx]
         if mode == "ranked":
-            wr, lr = records[widx]["rating"], records[1 - widx]["rating"]
+            # Read now, not when the duel began: a match that finished meanwhile would
+            # otherwise have its rating change overwritten by this one.
+            win_rec, loss_rec = self.bot.duel.get(winner.id), self.bot.duel.get(loser.id)
+            wr, lr = win_rec["rating"], loss_rec["rating"]
             new_w, new_l = elo_update(
-                wr,
-                lr,
-                k=ranked_k(records[widx]["ranked_games"]),
-                k_loser=ranked_k(records[1 - widx]["ranked_games"]),
+                wr, lr, k=ranked_k(win_rec["ranked_games"]), k_loser=ranked_k(loss_rec["ranked_games"])
             )
             win_level = self.bot.duel.apply_match(
                 winner.id, str(winner), True, RANKED_WIN_XP, new_rating=new_w, trophies=RANKED_TROPHIES, ranked=True
@@ -93,11 +123,14 @@ class Duel(commands.Cog):
                 f"(+{RANKED_TROPHIES} {emojis.TROPHY}) · {loser.mention} **{lr}→{new_l}**"
             )
         else:
-            prize = bet * 2 if bet else CASUAL_WIN_COINS
-            self.bot.economy.add_coins(winner.id, str(winner), prize)
+            prize = wager_prize(bet) if bet else CASUAL_WIN_COINS
+            self.bot.economy.add_coins(winner.id, str(winner), prize, "wager" if bet else "duel")
             for stake in stakes:
                 self.bot.economy.close_stake(stake)
-            note = f"takes the **{prize}**-MiniCoin pot" if bet else f"earns **{prize}** MiniCoins"
+            if bet:
+                note = f"takes **{prize}** of the {bet * 2}-MiniCoin pot after the {WAGER_RAKE_PERCENT}% house cut"
+            else:
+                note = f"earns **{prize}** MiniCoins"
             win_level = self.bot.duel.apply_match(winner.id, str(winner), True, CASUAL_WIN_XP)
             loss_level = self.bot.duel.apply_match(loser.id, str(loser), False, CASUAL_LOSS_XP)
             msg = f"{emojis.TROPHY} {winner.mention} {note} {emojis.COIN}"
@@ -112,15 +145,16 @@ class Duel(commands.Cog):
         await channel.send(f"{msg}\n{extra}" if extra else msg)
 
     async def _begin(self, channel, p0, p1, mode, bet, stakes):
-        c0, r0 = self._fighter(p0)
-        c1, r1 = self._fighter(p1)
-        state = new_duel(c0, c1, random.randint(0, 1))  # random first move
-        players, records = [p0, p1], [r0, r1]
+        ranked = mode == "ranked"
+        c0, _ = self._fighter(p0, ranked)
+        c1, _ = self._fighter(p1, ranked)
+        state = new_duel(c0, c1, random.randint(0, 1), SECOND_MOVER_ENERGY)  # random first move
+        players = [p0, p1]
 
         async def on_end(widx):
-            await self._settle(channel, players, records, mode, bet, widx, stakes)
+            await self._settle(channel, players, mode, bet, widx, stakes)
+            await self.bot.announce_played(channel, players)
 
-        await channel.send(embed=rules_embed())
         view = DuelView(players, state, on_end=on_end)
         view.render_turn()
         view.message = await channel.send(embed=view.embed(), view=view)
@@ -138,7 +172,7 @@ class Duel(commands.Cog):
             stakes = []
             if mode == "casual" and bet:
                 for player in (challenger, opponent):
-                    stake = self.bot.economy.stake(player.id, str(player), bet, "duel")
+                    stake = self.bot.economy.stake(player.id, str(player), bet, "wager")
                     if stake is None:
                         self._return_stakes([challenger], bet, stakes)
                         who = "can no longer" if player is challenger else "can't"
@@ -184,13 +218,15 @@ class Duel(commands.Cog):
         async def on_end(widx):
             try:
                 await settle(widx)
+                await self.bot.announce_played(channel, [member])
             finally:
                 self.in_arena.discard(member.id)
 
         async def settle(widx):
+            left_note = f"{_attempts(left)} left today." if left else "That was your last attempt for today."
             if widx == 0:
                 coins = arena_reward(floor, is_boss)
-                self.bot.economy.add_coins(member.id, str(member), coins)
+                self.bot.economy.add_coins(member.id, str(member), coins, "arena")
                 new_floor = self.bot.duel.advance_arena_floor(member.id)
                 win_level = self.bot.duel.apply_match(member.id, str(member), True, ARENA_WIN_XP)
                 level_up, bonus = self.bot.apply_level_up(member.id, str(member), win_level)
@@ -214,18 +250,16 @@ class Duel(commands.Cog):
                     msg += f"\n{extra}"
                 await channel.send(msg)
             elif widx == "draw":
-                await channel.send(f"🤝 {member.mention} drew with {name} on floor {floor}. Try again, it's free.")
+                await channel.send(f"🤝 {member.mention} drew with {name} on floor {floor}. {left_note}")
             else:
                 loss_level = self.bot.duel.apply_match(member.id, str(member), False, ARENA_LOSS_XP)
                 self.bot.apply_level_up(member.id, str(member), loss_level)
-                note = f"{left} attempts left today." if left else "That was your last attempt for today."
-                await channel.send(f"💀 {name} holds floor {floor} against {member.mention}. {note}")
+                await channel.send(f"💀 {name} holds floor {floor} against {member.mention}. {left_note}")
 
         try:
-            await channel.send(embed=rules_embed())
             boss_tag = " · **BOSS**" if is_boss else ""
             await channel.send(
-                f"🗼 **Arena floor {floor}**{boss_tag} · vs {label} · {left} attempts left after this one."
+                f"🗼 **Arena floor {floor}**{boss_tag} · vs {label} · {_attempts(left)} left after this one."
             )
             view = DuelView([member, ai_user], state, on_end=on_end, ai_index=1)
             view.render_turn()
@@ -278,7 +312,7 @@ class Duel(commands.Cog):
                 for k, v in g.items()
                 if k in ("attack", "defense", "max_hp", "max_energy")
             )
-            bits = stat_bits or g.get("desc", "")
+            bits = " · ".join(filter(None, [stat_bits, g.get("desc")]))
             tag = (
                 f"✅ owned{f' +{levels[gid]}' if levels.get(gid) else ''}"
                 if gid in owned
@@ -309,18 +343,35 @@ class Duel(commands.Cog):
         return discord.Embed(title="📊 Duel Rankings", description=desc, color=discord.Color.dark_red())
 
     # --- play commands ---
+    def _casual_problem(self, user, opponent, bet):
+        """Why this casual duel can't be offered, or None."""
+        reason = invalid_opponent(opponent, user, self_message="You can't duel yourself!")
+        if reason:
+            return reason
+        if bet < 0:
+            return "Your bet can't be negative."
+        if bet and self.bot.economy.balance(user.id)[0] < bet:
+            return "You don't have enough MiniCoins for that wager."
+        return None
+
+    def _ranked_problem(self, user, opponent):
+        """Why this ranked duel can't be offered, or None."""
+        reason = invalid_opponent(opponent, user, self_message="You can't duel yourself!")
+        if reason:
+            return reason
+        rc = self.bot.duel.get_or_create(user.id, str(user))
+        ro = self.bot.duel.get_or_create(opponent.id, str(opponent))
+        if not can_rank(rc["rating"], ro["rating"]):
+            return f"Your ratings are more than {RANK_MAX_GAP} apart, so only a casual duel is allowed."
+        return None
+
     @commands.command()
     @commands.cooldown(1, 20, commands.BucketType.user)
     async def duel(self, ctx, opponent: discord.Member, bet: int = 0):
-        reason = invalid_opponent(opponent, ctx.author, self_message="You can't duel yourself!")
+        reason = self._casual_problem(ctx.author, opponent, bet)
         if reason:
+            ctx.command.reset_cooldown(ctx)
             await ctx.send(reason)
-            return
-        if bet < 0:
-            await ctx.send("Bet can't be negative.")
-            return
-        if bet and self.bot.economy.balance(ctx.author.id)[0] < bet:
-            await ctx.send("You don't have enough MiniCoins for that wager.")
             return
         await self._challenge(ctx.channel, ctx.author, opponent, "casual", bet)
 
@@ -328,14 +379,9 @@ class Duel(commands.Cog):
     @app_commands.describe(opponent="Who to duel", bet="MiniCoins to wager (0 = friendly)")
     @app_commands.checks.cooldown(1, 20, key=lambda i: i.user.id)
     async def duel_slash(self, interaction: discord.Interaction, opponent: discord.Member, bet: int = 0):
-        reason = invalid_opponent(opponent, interaction.user, self_message="You can't duel yourself!")
+        reason = self._casual_problem(interaction.user, opponent, bet)
         if reason:
             await interaction.response.send_message(reason, ephemeral=True)
-            return
-        if bet < 0 or (bet and self.bot.economy.balance(interaction.user.id)[0] < bet):
-            await interaction.response.send_message(
-                "That wager is either negative or more than you have.", ephemeral=True
-            )
             return
         await interaction.response.send_message(f"{emojis.DUEL} Challenge sent!", ephemeral=True)
         await self._challenge(interaction.channel, interaction.user, opponent, "casual", bet)
@@ -343,14 +389,10 @@ class Duel(commands.Cog):
     @commands.command()
     @commands.cooldown(1, 20, commands.BucketType.user)
     async def ranked(self, ctx, opponent: discord.Member):
-        reason = invalid_opponent(opponent, ctx.author, self_message="You can't duel yourself!")
+        reason = self._ranked_problem(ctx.author, opponent)
         if reason:
+            ctx.command.reset_cooldown(ctx)
             await ctx.send(reason)
-            return
-        rc = self.bot.duel.get_or_create(ctx.author.id, str(ctx.author))
-        ro = self.bot.duel.get_or_create(opponent.id, str(opponent))
-        if not can_rank(rc["rating"], ro["rating"]):
-            await ctx.send(f"Your ratings are more than {RANK_MAX_GAP} apart, so only a casual `;duel` is allowed.")
             return
         await self._challenge(ctx.channel, ctx.author, opponent, "ranked", 0)
 
@@ -358,16 +400,9 @@ class Duel(commands.Cog):
     @app_commands.describe(opponent="Who to duel")
     @app_commands.checks.cooldown(1, 20, key=lambda i: i.user.id)
     async def ranked_slash(self, interaction: discord.Interaction, opponent: discord.Member):
-        reason = invalid_opponent(opponent, interaction.user, self_message="You can't duel yourself!")
+        reason = self._ranked_problem(interaction.user, opponent)
         if reason:
             await interaction.response.send_message(reason, ephemeral=True)
-            return
-        rc = self.bot.duel.get_or_create(interaction.user.id, str(interaction.user))
-        ro = self.bot.duel.get_or_create(opponent.id, str(opponent))
-        if not can_rank(rc["rating"], ro["rating"]):
-            await interaction.response.send_message(
-                f"Your ratings are more than {RANK_MAX_GAP} apart, so only a casual duel is allowed.", ephemeral=True
-            )
             return
         await interaction.response.send_message(f"{emojis.DUEL} Ranked challenge sent!", ephemeral=True)
         await self._challenge(interaction.channel, interaction.user, opponent, "ranked", 0)
@@ -409,89 +444,127 @@ class Duel(commands.Cog):
     async def duelrank_slash(self, interaction: discord.Interaction):
         await interaction.response.send_message(embed=self._rank_embed())
 
-    # --- management commands (prefix only) ---
-    @commands.command()
-    @commands.cooldown(1, 3, commands.BucketType.user)
-    async def buygear(self, ctx, item: str):
+    # --- management commands ---
+    def _buy_gear(self, user, item):
         item = item.lower()
         if item not in GEAR:
-            await ctx.send("No such gear. See `;duelshop`.")
-            return
-        if self.bot.duel.owns_gear(ctx.author.id, item):
-            await ctx.send("You already own that.")
-            return
-        if not self.bot.economy.spend(ctx.author.id, GEAR[item]["price"]):
-            await ctx.send("You can't afford that yet.")
-            return
-        self.bot.duel.get_or_create(ctx.author.id, str(ctx.author))
-        self.bot.duel.grant_gear(ctx.author.id, item)
-        await ctx.send(f"Bought **{GEAR[item]['name']}**! Equip it with `;equip {item}`.")
+            return "No such gear. See `;duelshop`."
+        if self.bot.duel.owns_gear(user.id, item):
+            return "You already own that."
+        if not self.bot.economy.spend(user.id, GEAR[item]["price"], "gear"):
+            return "You can't afford that yet."
+        self.bot.duel.get_or_create(user.id, str(user))
+        self.bot.duel.grant_gear(user.id, item)
+        return f"Bought **{GEAR[item]['name']}**! Equip it with `;equip {item}`."
 
-    @commands.command()
-    @commands.cooldown(1, 3, commands.BucketType.user)
-    async def buyability(self, ctx, ability: str):
+    def _buy_ability(self, user, ability):
         ability = ability.lower()
         ab = ABILITIES.get(ability)
         if ab is None or ab.price <= 0:
-            await ctx.send("No such buyable ability. See `;duelshop`.")
-            return
-        if self.bot.duel.has_ability(ctx.author.id, ability):
-            await ctx.send("Already unlocked.")
-            return
-        if not self.bot.economy.spend(ctx.author.id, ab.price):
-            await ctx.send("You can't afford that yet.")
-            return
-        self.bot.duel.get_or_create(ctx.author.id, str(ctx.author))
-        self.bot.duel.unlock_ability(ctx.author.id, ability)
-        await ctx.send(f"Unlocked **{ab.name}**! Add it to your kit with `;loadout`.")
+            return "No such buyable ability. See `;duelshop`."
+        if self.bot.duel.has_ability(user.id, ability):
+            return "Already unlocked."
+        if not self.bot.economy.spend(user.id, ab.price, "ability"):
+            return "You can't afford that yet."
+        self.bot.duel.get_or_create(user.id, str(user))
+        self.bot.duel.unlock_ability(user.id, ability)
+        return f"Unlocked **{ab.name}**! Add it to your kit with `;loadout`."
 
-    @commands.command()
-    @commands.cooldown(1, 3, commands.BucketType.user)
-    async def enhance(self, ctx, item: str):
+    def _enhance(self, user, item):
         item = item.lower()
         if item not in GEAR:
-            await ctx.send("No such gear. See `;duelshop`.")
-            return
-        if not self.bot.duel.owns_gear(ctx.author.id, item):
-            await ctx.send("You don't own that gear. Buy it with `;buygear` first.")
-            return
-        level = self.bot.duel.gear_level(ctx.author.id, item)
+            return "No such gear. See `;duelshop`."
+        if not self.bot.duel.owns_gear(user.id, item):
+            return "You don't own that gear. Buy it with `;buygear` first."
+        level = self.bot.duel.gear_level(user.id, item)
         if level >= ENHANCE_MAX:
-            await ctx.send(f"**{GEAR[item]['name']} +{level}** is already fully enhanced.")
-            return
+            return f"**{GEAR[item]['name']} +{level}** is already fully enhanced."
         cost = enhance_cost(level)
-        if not self.bot.economy.spend(ctx.author.id, cost):
-            await ctx.send(f"Enhancing to **+{level + 1}** costs **{cost}** MiniCoins. Earn some more first.")
-            return
-        new_level = self.bot.duel.enhance_gear(ctx.author.id, item)
+        if not self.bot.economy.spend(user.id, cost, "enhance"):
+            return f"Enhancing to **+{level + 1}** costs **{cost}** MiniCoins. Earn some more first."
+        new_level = self.bot.duel.enhance_gear(user.id, item)
         slot = GEAR[item]["slot"]
         per = {"weapon": "+1 attack", "armor": "+1 defense", "accessory": "+4 max HP"}[slot]
         msg = f"🔨 **{GEAR[item]['name']} +{new_level}** ({per} per level)."
         if new_level < ENHANCE_MAX:
             msg += f" Next level costs {enhance_cost(new_level)} {emojis.COIN}."
-        new = self.bot.award_achievements(ctx.author.id, str(ctx.author))
-        extra = RewardResult(new_achievements=new).line()
-        if extra:
-            msg += f"\n{extra}"
-        await ctx.send(msg)
+        extra = RewardResult(new_achievements=self.bot.award_achievements(user.id, str(user))).line()
+        return f"{msg}\n{extra}" if extra else msg
+
+    def _equip(self, user, item):
+        item = item.lower()
+        result = self.bot.duel.equip(user.id, item)
+        if result == "equipped":
+            return f"Equipped **{GEAR[item]['name']}**."
+        if result == "unowned":
+            return "You don't own that gear. Buy it with `;buygear`."
+        return "No such gear. See `;duelshop`."
+
+    def _loadout_view(self, user):
+        rec = self.bot.duel.get_or_create(user.id, str(user))
+        unlocked = [a for a in self.bot.duel.unlocked_abilities(user.id) if a in ABILITIES and a != "strike"]
+        return LoadoutView(self.bot.duel, user, unlocked, rec["loadout"])
+
+    @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def buygear(self, ctx, item: str):
+        await ctx.send(self._buy_gear(ctx.author, item))
+
+    @app_commands.command(name="buygear", description="Buy a piece of duel gear")
+    @app_commands.describe(item="The gear to buy")
+    @app_commands.autocomplete(item=_gear_choices)
+    @app_commands.checks.cooldown(1, 3, key=lambda i: i.user.id)
+    async def buygear_slash(self, interaction: discord.Interaction, item: str):
+        await interaction.response.send_message(self._buy_gear(interaction.user, item))
+
+    @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def buyability(self, ctx, ability: str):
+        await ctx.send(self._buy_ability(ctx.author, ability))
+
+    @app_commands.command(name="buyability", description="Unlock a duel ability")
+    @app_commands.describe(ability="The ability to unlock")
+    @app_commands.autocomplete(ability=_ability_choices)
+    @app_commands.checks.cooldown(1, 3, key=lambda i: i.user.id)
+    async def buyability_slash(self, interaction: discord.Interaction, ability: str):
+        await interaction.response.send_message(self._buy_ability(interaction.user, ability))
+
+    @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def enhance(self, ctx, item: str):
+        await ctx.send(self._enhance(ctx.author, item))
+
+    @app_commands.command(name="enhance", description="Upgrade a piece of gear you own")
+    @app_commands.describe(item="The gear to upgrade")
+    @app_commands.autocomplete(item=_owned_gear_choices)
+    @app_commands.checks.cooldown(1, 3, key=lambda i: i.user.id)
+    async def enhance_slash(self, interaction: discord.Interaction, item: str):
+        await interaction.response.send_message(self._enhance(interaction.user, item))
 
     @commands.command()
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def equip(self, ctx, item: str):
-        result = self.bot.duel.equip(ctx.author.id, item.lower())
-        if result == "equipped":
-            await ctx.send(f"Equipped **{GEAR[item.lower()]['name']}**.")
-        elif result == "unowned":
-            await ctx.send("You don't own that gear. Buy it with `;buygear`.")
-        else:
-            await ctx.send("No such gear. See `;duelshop`.")
+        await ctx.send(self._equip(ctx.author, item))
+
+    @app_commands.command(name="equip", description="Equip a piece of gear you own")
+    @app_commands.describe(item="The gear to equip")
+    @app_commands.autocomplete(item=_owned_gear_choices)
+    @app_commands.checks.cooldown(1, 3, key=lambda i: i.user.id)
+    async def equip_slash(self, interaction: discord.Interaction, item: str):
+        await interaction.response.send_message(self._equip(interaction.user, item))
 
     @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def loadout(self, ctx):
-        rec = self.bot.duel.get_or_create(ctx.author.id, str(ctx.author))
-        unlocked = [a for a in self.bot.duel.unlocked_abilities(ctx.author.id) if a in ABILITIES and a != "strike"]
-        view = LoadoutView(self.bot.duel, ctx.author, unlocked, rec["loadout"])
+        view = self._loadout_view(ctx.author)
         view.message = await ctx.send(embed=view.embed(), view=view)
+
+    @app_commands.command(name="loadout", description="Pick the abilities you take into a duel")
+    @app_commands.checks.cooldown(1, 3, key=lambda i: i.user.id)
+    async def loadout_slash(self, interaction: discord.Interaction):
+        view = self._loadout_view(interaction.user)
+        await interaction.response.send_message(embed=view.embed(), view=view)
+        view.message = await interaction.original_response()
 
 
 async def setup(bot):

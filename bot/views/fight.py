@@ -35,12 +35,14 @@ def _gif_for(last_action):
         return ACTION_GIFS["Heavy Attack"]
     if "Crash Out" in last_action:
         return ACTION_GIFS["Crash Out"]
+    if "failed to dodge" in last_action:
+        return ACTION_GIFS["Dodge Fail"]
     if "dodged" in last_action:
-        return ACTION_GIFS["Dodge Fail"] if "failed" in last_action else ACTION_GIFS["Dodge Success"]
+        return ACTION_GIFS["Dodge Success"]
+    if "failed to parry" in last_action:
+        return ACTION_GIFS["Parry Fail"]
     if "parried" in last_action:
-        return ACTION_GIFS["Parry Fail"] if "failed" in last_action else ACTION_GIFS["Parry Success"]
-    if "forfeited" in last_action:
-        return ACTION_GIFS["Forfeit"]
+        return ACTION_GIFS["Parry Success"]
     return DEFAULT_GIF
 
 
@@ -60,13 +62,14 @@ class FirstMoveSelect(discord.ui.Select):
             return
 
         if self.values[0] == "Forfeit":
+            view.stop()
             embed = discord.Embed(
                 title="Game Over",
                 description=f"{interaction.user.mention} has forfeited the fight.",
                 color=discord.Color.red(),
             )
-            await interaction.response.edit_message(embed=embed, view=None)
-            view.stop()
+            embed.set_image(url=ACTION_GIFS["Forfeit"])
+            await interaction.response.edit_message(content=None, embed=embed, view=None)
             return
 
         if self.values[0] == "Attack First":
@@ -98,6 +101,12 @@ class FightView(discord.ui.View):
         self.phase = "attack"
         self.add_item(FirstMoveSelect())
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id in (self.user1.id, self.user2.id):
+            return True
+        await interaction.response.send_message("This game isn't yours.", ephemeral=True)
+        return False
+
     async def start_game(self, interaction):
         self.clear_items()
         self.add_item(AttackButton())
@@ -116,9 +125,10 @@ class FightView(discord.ui.View):
         embed.add_field(name="Round", value=self.round, inline=True)
         embed.add_field(name="Last Action", value=self.last_action or "​", inline=False)
         embed.set_image(url=_gif_for(self.last_action))
-        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.response.edit_message(content=None, embed=embed, view=self)
 
     async def end_game(self, interaction, winner):
+        self.stop()  # before the first await, so a second click can't end this twice
         line = (await self.on_win(winner)).line()
         embed = discord.Embed(
             title="Game Over", description=f"{winner.mention} wins!" + (f"  ·  {line}" if line else "")
@@ -126,8 +136,7 @@ class FightView(discord.ui.View):
         embed.add_field(name=f"{self.user1.name}'s HP", value=self.hp[self.user1], inline=True)
         embed.add_field(name=f"{self.user2.name}'s HP", value=self.hp[self.user2], inline=True)
         embed.set_image(url=_gif_for(self.last_action))
-        await interaction.response.edit_message(embed=embed, view=None)
-        self.stop()
+        await interaction.response.edit_message(content=None, embed=embed, view=None)
 
     async def on_timeout(self):
         if self.message:
@@ -180,9 +189,12 @@ class FightView(discord.ui.View):
         await self.update_embed(interaction)
 
     def _arm(self, phase):
-        """Enable just this phase's buttons: the three attacks, or Dodge and Parry."""
+        """Enable just this phase's buttons: the three attacks, or Dodge and Parry.
+        Crash Out stays off once the player on turn has used theirs."""
         for item in self.children:
             item.disabled = isinstance(item, (AttackButton, HeavyAttackButton, CrashOutButton)) != (phase == "attack")
+            if isinstance(item, CrashOutButton) and self.crash_out_used[self.turn]:
+                item.disabled = True
 
     async def process_defense(self, interaction, defense_move):
         if defense_move == "Dodge":

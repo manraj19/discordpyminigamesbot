@@ -4,9 +4,6 @@ Each achievement is (name, description, reward, condition) where reward is the
 MiniCoins granted on unlock and condition takes a stats dict and returns True
 once earned. The bot gathers the stats from its services, grants any newly met
 achievements, pays the reward, and announces it through the reward pipeline.
-
-More achievements that need stats introduced by later phases (arena floors,
-seasons, distinct-game wins) are added in those phases.
 """
 
 # id -> (name, description, reward, condition(stats) -> bool)

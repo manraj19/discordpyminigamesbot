@@ -11,7 +11,6 @@ pipeline.
 """
 
 import datetime
-import sqlite3
 
 from bot.games.quests import (
     DAILY_BONUS_COINS,
@@ -21,12 +20,12 @@ from bot.games.quests import (
     assign,
     period_key,
 )
+from bot.services.db import connect
 
 
 class QuestService:
     def __init__(self, db_path="scores.db"):
-        self._conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")  # concurrent readers with one writer, safer on crash
+        self._conn = connect(db_path)
         self._conn.execute(
             """CREATE TABLE IF NOT EXISTS quests (
                 user_id INTEGER,

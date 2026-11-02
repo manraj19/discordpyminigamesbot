@@ -15,6 +15,7 @@ def _load_lines(name):
 
 
 COUNTRIES = _load("countries")  # {alpha2_code: country_name}
+COUNTRY_ALIASES = _load("country_aliases")  # {alpha2_code: list[other names players use]}
 TRUTH = _load("truth")  # list[str]
 DARE = _load("dare")  # list[str]
 RIDDLES = _load("riddles")  # list[{"question", "answer"}]

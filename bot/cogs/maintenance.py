@@ -5,6 +5,7 @@ cog_check only gates the ``;usage`` command so the report stays owner-only.
 """
 
 import asyncio
+import datetime
 import logging
 import sqlite3
 
@@ -15,14 +16,19 @@ from bot.core import config, embeds
 log = logging.getLogger(__name__)
 
 DB_PATH = "scores.db"
-BACKUP_PATH = "scores.db.bak"
 
 
-def _backup():
-    """Copy the live database to the backup file with SQLite's online backup API,
-    which is safe against a running WAL database. Blocking, so run in a thread."""
+def _backup_path():
+    """One file per weekday, so a day with bad data can't overwrite the only good copy."""
+    weekday = datetime.datetime.now(datetime.timezone.utc).strftime("%a").lower()
+    return f"scores-{weekday}.db.bak"
+
+
+def _backup(path):
+    """Copy the live database to ``path`` with SQLite's online backup API, which
+    is safe against a running WAL database. Blocking, so run in a thread."""
     src = sqlite3.connect(DB_PATH)
-    dst = sqlite3.connect(BACKUP_PATH)
+    dst = sqlite3.connect(path)
     try:
         with dst:
             src.backup(dst)
@@ -45,9 +51,10 @@ class Maintenance(commands.Cog):
     # --- daily backup (also runs once on boot) ---
     @tasks.loop(hours=24)
     async def backup_db(self):
+        path = _backup_path()
         try:
-            await asyncio.to_thread(_backup)
-            log.info("Database backed up to %s", BACKUP_PATH)
+            await asyncio.to_thread(_backup, path)
+            log.info("Database backed up to %s", path)
         except Exception:
             log.exception("Database backup failed")
 

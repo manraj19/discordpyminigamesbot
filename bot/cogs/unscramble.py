@@ -39,12 +39,12 @@ class Unscramble(commands.Cog):
         msg = await channel.send(f"{prefix}  ⏳ **{secs}s**")
         ticker = asyncio.create_task(run_countdown(msg, secs, prefix))
 
+        def is_guess(m):  # anything else is chat, and must not use up the one guess
+            text = m.content.strip()
+            return m.author == player and m.channel == channel and len(text) == len(answer) and text.isalpha()
+
         try:
-            guess = await self.bot.wait_for(
-                "message",
-                check=lambda m: m.author == player and m.channel == channel,
-                timeout=float(secs),
-            )
+            guess = await self.bot.wait_for("message", check=is_guess, timeout=float(secs))
         except asyncio.TimeoutError:
             await channel.send(f"⏰ Time's up! The word was **{answer.upper()}**.")
             return

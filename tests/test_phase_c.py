@@ -89,8 +89,14 @@ def test_momentum_locket_keeps_one_stack():
 def test_twinstrike_hits_twice():
     s = _duel(["twinstrike"])
     step(s, "twinstrike")
-    assert s.fighters[1].hp == 100 - 2 * 7
+    assert s.fighters[1].hp == 100 - 9 - 4  # the second hit lands at half strength
     assert s.fighters[0].momentum == 1  # one stack per ability, not per hit
+
+
+def test_twinstrike_second_hit_keeps_attack_from_doubling():
+    s = _duel(["twinstrike"], attack=11)
+    step(s, "twinstrike")
+    assert s.fighters[1].hp == 100 - 20 - 10  # used to be 36, and the gap kept growing with attack
 
 
 def test_shatter_destroys_shield_then_hits():
@@ -107,7 +113,7 @@ def test_ward_cleanses_own_afflictions():
     step(s, "ward")
     a = s.fighters[0]
     assert a.bleed == 0 and a.poison == 0 and a.weaken == 0
-    assert a.shield == 8
+    assert a.shield == 14
 
 
 def test_rupture_consumes_dots_for_burst():
@@ -116,7 +122,7 @@ def test_rupture_consumes_dots_for_burst():
     s.fighters[1].shield = 50  # like DoTs, rupture ignores shield
     step(s, "rupture")
     b = s.fighters[1]
-    assert b.hp == 100 - 4 * 7
+    assert b.hp == 100 - 4 * 8
     assert b.bleed == 0 and b.poison == 0
     assert b.shield == 50
 
@@ -185,9 +191,9 @@ def test_enhance_bonus_by_slot():
 
 def test_aggregate_stats_with_enhancements_and_passives():
     stats = aggregate_stats(1, weapon="berserker_axe", accessory="regen_ring", gear_levels={"berserker_axe": 3})
-    assert stats["attack"] == 16 + 3
-    assert stats["max_hp"] == 100 - 15
-    assert stats["regen"] == 2
+    assert stats["attack"] == 14 + 3
+    assert stats["max_hp"] == 100 - 20
+    assert stats["regen"] == 3
     locket = aggregate_stats(1, accessory="momentum_locket")
     assert locket["keep_momentum"] is True
 

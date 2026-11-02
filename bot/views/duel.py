@@ -6,6 +6,7 @@ import contextlib
 import discord
 
 from bot.core import emojis
+from bot.core.checks import is_blocked
 from bot.games.duel import ABILITIES, DRAW, LOADOUT_SIZE, ai_choose, available_moves, step
 
 _STYLE = {
@@ -20,11 +21,18 @@ _STYLE = {
     "rupture": discord.ButtonStyle.danger,
     "shatter": discord.ButtonStyle.danger,
     "twinstrike": discord.ButtonStyle.danger,
+    "pierce": discord.ButtonStyle.danger,
+    "reckless": discord.ButtonStyle.danger,
+    "unleash": discord.ButtonStyle.danger,
+    "siphon": discord.ButtonStyle.danger,
+    "expose": discord.ButtonStyle.danger,
+    "vengeance": discord.ButtonStyle.danger,
     "guard": discord.ButtonStyle.success,
     "mend": discord.ButtonStyle.success,
     "ward": discord.ButtonStyle.success,
     "riposte": discord.ButtonStyle.success,
     "adrenaline": discord.ButtonStyle.success,
+    "sidestep": discord.ButtonStyle.success,
     "focus": discord.ButtonStyle.secondary,
     "sharpen": discord.ButtonStyle.secondary,
 }
@@ -54,10 +62,14 @@ def rules_embed():
             "your opponent to 0 HP.\n\n"
             f"**Status effects:** {emojis.BLEED} bleed and {emojis.POISON} poison deal damage at the start of "
             f"your turns · {emojis.SHIELD} shield soaks damage · {emojis.STUN} stun skips your next turn · "
-            "🔻 weaken lowers attack · 🔺 sharpen raises it.\n\n"
+            "🔻 weaken lowers attack · 🔺 sharpen raises it · 🎯 exposed means every hit on you deals more · "
+            "💨 sidestep makes the next hit miss · 🪶 a Phoenix Charm that hasn't saved you yet.\n\n"
             "🔥 **Momentum:** every turn you land damage adds a stack (+2 attack each, up to 5). Playing "
-            "Guard, Mend, or Focus resets it, so turtling costs you your ramp. Some abilities also have a "
+            "Guard or Mend resets it, so turtling costs you your ramp. Some abilities also have a "
             "**cooldown** (CD) of a few turns after use.\n\n"
+            "Whoever goes second in a duel between players starts with 2 extra energy, since going first is "
+            "a real edge.\n\n"
+            "Each level adds HP up to level 20. In ranked, everyone fights with level 20 HP.\n\n"
             "Your kit is **Strike** (always available) plus your loadout. Buy gear and abilities in "
             "`;duelshop`, equip with `;equip`, and set your loadout with `;loadout`."
         ),
@@ -90,6 +102,12 @@ def _status_line(c):
         effects.append(f"🔥{c.momentum}")
     if c.riposte_ready:
         effects.append("↩️")
+    if c.exposed:
+        effects.append(f"🎯{c.exposed}")
+    if c.evading:
+        effects.append("💨")
+    if c.last_stand:
+        effects.append("🪶")
     line = "  ".join(parts)
     if effects:
         line += "\n" + " ".join(effects)
@@ -107,6 +125,14 @@ class AbilityButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.on_button(interaction, self.ability_id)
+
+
+class RulesButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Rules", style=discord.ButtonStyle.secondary, row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_message(embed=rules_embed(), ephemeral=True)
 
 
 class DuelView(discord.ui.View):
@@ -129,6 +155,7 @@ class DuelView(discord.ui.View):
             button = AbilityButton(ability_id, actor.cooldowns.get(ability_id, 0))
             button.disabled = ability_id not in legal
             self.add_item(button)
+        self.add_item(RulesButton())
 
     def disable_all(self):
         for item in self.children:
@@ -173,8 +200,12 @@ class DuelView(discord.ui.View):
 
         if winner is not None:
             self.disable_all()
-            await interaction.response.edit_message(embed=self.embed(winner), view=self)
+            # Stop before the first await: a second click in that gap would settle the
+            # duel twice. And a failed edit can't be allowed to skip the settlement,
+            # or the timeout later forfeits whoever is on the clock, which is the winner.
             self.stop()
+            with contextlib.suppress(discord.HTTPException):
+                await interaction.response.edit_message(embed=self.embed(winner), view=self)
             if winner is DRAW:
                 await self.on_end("draw")
             else:
@@ -217,7 +248,7 @@ class DuelChallengeView(discord.ui.View):
         self.message = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id == self.opponent.id:
+        if interaction.user.id == self.opponent.id and not is_blocked(interaction.client, self.opponent.id):
             return True
         await interaction.response.send_message("This challenge isn't for you.", ephemeral=True)
         return False

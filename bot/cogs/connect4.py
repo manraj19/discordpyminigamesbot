@@ -1,5 +1,7 @@
 """Connect 4 command."""
 
+from functools import partial
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -14,18 +16,16 @@ class Connect4(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def _record_win(self, member):
-        return self.bot.reward(member, 1, GAME)
-
     async def _start(self, send, player, opponent):
-        view = Connect4View(player, opponent, on_win=self._record_win)
-        view.message = await send(embed=view.embed(), view=view)
+        view = Connect4View(player, opponent, on_win=partial(self.bot.finish_match, GAME, [player, opponent]))
+        view.message = await send(content=f"{player.mention} vs {opponent.mention}", embed=view.embed(), view=view)
 
     @commands.command(name="connect4", aliases=["c4"])
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def connect4_prefix(self, ctx, opponent: discord.Member):
         reason = invalid_opponent(opponent, ctx.author, self_message="You cannot play a game with yourself!")
         if reason:
+            ctx.command.reset_cooldown(ctx)
             await ctx.send(reason)
             return
 

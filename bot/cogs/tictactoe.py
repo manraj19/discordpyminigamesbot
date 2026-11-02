@@ -1,8 +1,6 @@
-"""Tic-Tac-Toe command cog.
+"""Tic-Tac-Toe command. A single ``_start`` drives both prefix and slash."""
 
-Demonstrates the target pattern: a single ``_start`` core drives both the
-prefix command and the slash command, so the two stay in lockstep instead of
-being copy-pasted (as they were in the monolith)."""
+from functools import partial
 
 import discord
 from discord import app_commands
@@ -18,13 +16,10 @@ class TicTacToe(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def _record_win(self, member):
-        return self.bot.reward(member, 1, GAME)
-
     async def _start(self, send, challenger, opponent):
         """Shared game starter. ``send(content, view)`` must send the message
         and return it, so prefix and slash can differ only in how they reply."""
-        view = TicTacToeView(challenger, opponent, on_win=self._record_win)
+        view = TicTacToeView(challenger, opponent, on_win=partial(self.bot.finish_match, GAME, [challenger, opponent]))
         view.message = await send(
             f"{challenger.mention} vs {opponent.mention}\n{challenger.mention}, you're up first!",
             view,
@@ -35,6 +30,7 @@ class TicTacToe(commands.Cog):
     async def tictactoe_prefix(self, ctx, opponent: discord.Member):
         reason = invalid_opponent(opponent, ctx.author)
         if reason:
+            ctx.command.reset_cooldown(ctx)
             await ctx.send(reason)
             return
 

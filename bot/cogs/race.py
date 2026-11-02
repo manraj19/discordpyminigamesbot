@@ -9,6 +9,7 @@ from discord.ext import commands
 
 from bot.core import emojis
 from bot.core.utils import invalid_opponent
+from bot.views.confirm import ConfirmView
 
 WORDS = [
     "go",
@@ -37,21 +38,26 @@ class Race(commands.Cog):
     async def _first_correct(self, check, word):
         """Return the first player to type ``word`` exactly, or None on timeout.
         Wrong answers are ignored so a typo doesn't waste the round."""
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + ROUND_TIMEOUT
-        while True:
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                return None
-            try:
-                message = await self.bot.wait_for("message", check=check, timeout=remaining)
-            except asyncio.TimeoutError:
-                return None
-            if message.content.lower().strip() == word:
-                return message.author
+        try:
+            message = await self.bot.wait_for(
+                "message", check=lambda m: check(m) and m.content.lower().strip() == word, timeout=ROUND_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            return None
+        return message.author
 
     async def _play(self, channel, player1, player2):
         await self.bot.play(channel, [player1, player2], lambda: self._run(channel, player1, player2))
+
+    async def _challenge(self, send, channel, challenger, opponent):
+        """Ask first: a race ties up both players for over a minute, so nobody gets
+        put in one without saying yes. ``send(content, view)`` returns the message."""
+
+        async def accepted(_interaction):
+            await self._play(channel, challenger, opponent)
+
+        view = ConfirmView(opponent.id, accepted)
+        view.message = await send(f"🏁 {opponent.mention}, {challenger.mention} wants to race you. You in?", view)
 
     async def _run(self, channel, player1, player2):
         intro = discord.Embed(
@@ -86,6 +92,8 @@ class Race(commands.Cog):
             else:
                 scores[winner] += 1
                 await channel.send(f"✅ {winner.mention} got it!  **{scores[player1]}-{scores[player2]}**")
+            if max(scores.values()) > ROUNDS // 2:
+                break  # nobody can catch up now
 
         if scores[player1] > scores[player2]:
             result = f"{emojis.TROPHY} {player1.mention} wins the race!"
@@ -105,9 +113,14 @@ class Race(commands.Cog):
     async def race(self, ctx, opponent: discord.Member):
         reason = invalid_opponent(opponent, ctx.author, self_message="You cannot race against yourself!")
         if reason:
+            ctx.command.reset_cooldown(ctx)
             await ctx.send(reason)
             return
-        await self._play(ctx.channel, ctx.author, opponent)
+
+        async def send(content, view):
+            return await ctx.send(content, view=view)
+
+        await self._challenge(send, ctx.channel, ctx.author, opponent)
 
     @app_commands.command(name="race", description="Race another user by typing words the fastest")
     @app_commands.describe(opponent="The member you want to race")
@@ -117,8 +130,12 @@ class Race(commands.Cog):
         if reason:
             await interaction.response.send_message(reason, ephemeral=True)
             return
-        await interaction.response.send_message(f"🏁 Get ready, {interaction.user.mention} vs {opponent.mention}!")
-        await self._play(interaction.channel, interaction.user, opponent)
+
+        async def send(content, view):
+            await interaction.response.send_message(content, view=view)
+            return await interaction.original_response()
+
+        await self._challenge(send, interaction.channel, interaction.user, opponent)
 
 
 async def setup(bot):

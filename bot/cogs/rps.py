@@ -1,5 +1,7 @@
 """Rock-Paper-Scissors command (prefix + slash share one starter)."""
 
+from functools import partial
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -14,11 +16,8 @@ class RockPaperScissors(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def _record_win(self, member):
-        return self.bot.reward(member, 1, GAME)
-
     async def _start(self, send, player, opponent):
-        view = RPSView(player, opponent, on_winner=self._record_win)
+        view = RPSView(player, opponent, on_winner=partial(self.bot.finish_match, GAME, [player, opponent]))
         view.message = await send(f"{player.mention} vs {opponent.mention}\nChoose your move!", view)
 
     @commands.command(name="rockpaperscissors", aliases=["rps"])
@@ -26,6 +25,7 @@ class RockPaperScissors(commands.Cog):
     async def rps_prefix(self, ctx, opponent: discord.Member):
         reason = invalid_opponent(opponent, ctx.author)
         if reason:
+            ctx.command.reset_cooldown(ctx)
             await ctx.send(reason)
             return
 

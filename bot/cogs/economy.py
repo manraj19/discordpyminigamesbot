@@ -9,17 +9,20 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import config, emojis
-from bot.core.rewards import progress_bar
+from bot.core.rewards import RewardResult, progress_bar
 from bot.games.achievements import ACHIEVEMENTS
 from bot.games.quests import DAILY_BONUS_COINS, DAILY_BONUS_XP, next_reset
-from bot.services.economy import STREAKSHIELD_PRICE, TITLES, title_name
+from bot.services.economy import GRANTED_TITLES, STREAKSHIELD_PRICE, TITLES, title_name
 
 log = logging.getLogger(__name__)
 
 # The /buy dropdown, built from the shop so a new title shows up without editing it.
 BUY_CHOICES = [
     app_commands.Choice(name=f"{name} ({price} MiniCoins)", value=item_id) for item_id, (name, price) in TITLES.items()
-] + [app_commands.Choice(name=f"Streak Shield ({STREAKSHIELD_PRICE} MiniCoins)", value="streakshield")]
+]
+BUY_CHOICES.append(app_commands.Choice(name=f"Streak Shield ({STREAKSHIELD_PRICE} MiniCoins)", value="streakshield"))
+BUY_CHOICES += [app_commands.Choice(name=f"{name} (earned title)", value=i) for i, name in GRANTED_TITLES.items()]
+BUY_CHOICES.append(app_commands.Choice(name="Take my title off", value="none"))
 
 
 class Economy(commands.Cog):
@@ -45,6 +48,9 @@ class Economy(commands.Cog):
             if extras.get("milestone_title"):
                 note += f" · earned the title **{extras['milestone_title']}**"
             lines.append(note)
+        unlocked = RewardResult(new_achievements=self.bot.award_achievements(user.id, str(user))).line()
+        if unlocked:
+            lines.append(unlocked)
         return discord.Embed(
             title="🪙 Daily reward claimed!",
             description="\n".join(lines),
@@ -126,6 +132,10 @@ class Economy(commands.Cog):
             else:
                 tag = f"{price} {emojis.COIN}"
             lines.append(f"`{item_id}` **{name}** · {tag}")
+        for item_id, name in GRANTED_TITLES.items():
+            if item_id in owned:
+                tag = "✅ equipped" if item_id == equipped else "earned"
+                lines.append(f"`{item_id}` **{name}** · {tag}")
         shield_tag = (
             "✅ owned" if self.bot.economy.owns(user.id, "streakshield") else f"{STREAKSHIELD_PRICE} {emojis.COIN}"
         )
@@ -133,12 +143,15 @@ class Economy(commands.Cog):
         return discord.Embed(
             title="🛍️ Shop",
             description="\n".join(lines)
-            + "\n\nBuy with `;buy <id>`. Titles show on your profile. A streak shield saves your streak "
-            "the next time you miss a day (hold one at a time).",
+            + "\n\nBuy or put on a title with `;buy <id>`, and take it off with `;buy none`. Titles show on your "
+            "profile. A streak shield saves your streak the next time you miss a day (hold one at a time).",
             color=discord.Color.gold(),
         )
 
     def _buy(self, user, item):
+        if item == "none":
+            self.bot.economy.equip_title(user.id, None)
+            return "Title off. It's still yours, so `;buy <id>` puts it back on for free."
         if item == "streakshield":
             result = self.bot.economy.buy_streakshield(user.id, str(user))
             return {
@@ -154,6 +167,7 @@ class Economy(commands.Cog):
             "bought": f"🛍️ Purchased and equipped **{name}**!",
             "equipped": f"✅ Equipped **{name}** (you already owned it).",
             "poor": f"You can't afford **{name}** yet. Play more games or `;daily`.",
+            "unearned": f"**{name}** can't be bought. You earn it by playing.",
         }[result]
 
     @commands.command()
@@ -169,7 +183,7 @@ class Economy(commands.Cog):
     async def buy(self, ctx, item: str):
         await ctx.send(self._buy(ctx.author, item.lower()))
 
-    @app_commands.command(name="buy", description="Buy a cosmetic title or a streak shield")
+    @app_commands.command(name="buy", description="Buy or put on a title, or buy a streak shield")
     @app_commands.choices(item=BUY_CHOICES)
     @app_commands.checks.cooldown(1, 3, key=lambda i: i.user.id)
     async def buy_slash(self, interaction: discord.Interaction, item: str):
@@ -195,12 +209,14 @@ class Economy(commands.Cog):
 
     # --- achievements ---
     def _achievements_embed(self, member):
-        self.bot.award_achievements(member.id, str(member))
+        unlocked = RewardResult(new_achievements=self.bot.award_achievements(member.id, str(member))).line()
         earned = set(self.bot.economy.earned_achievements(member.id))
         lines = [
             f"{'✅' if aid in earned else '🔒'} **{name}**: {desc}"
             for aid, (name, desc, _reward, _check) in ACHIEVEMENTS.items()
         ]
+        if unlocked:
+            lines = [unlocked, "", *lines]
         return discord.Embed(
             title=f"🏅 Achievements ({len(earned)}/{len(ACHIEVEMENTS)})",
             description="\n".join(lines),

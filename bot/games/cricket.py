@@ -64,7 +64,6 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
     fifty_highlighted = set()
     hundred_highlighted = set()
     balls_bowled = 0
-    chased = False
 
     # Two batsmen at the crease: striker faces, non-striker waits at the other
     # end. These are batting-order positions, so the skill weights stay tied to
@@ -74,17 +73,15 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
     def emit(text, kind):
         events.append({"text": text, "runs": runs, "wickets": wickets, "overs": _overs_str(balls_bowled), "kind": kind})
 
+    def result():
+        return runs, wickets, player_scores, player_wickets, events, _overs_str(balls_bowled), balls_faced, bowling
+
     def pick_bowler(last):
         # One bowler bowls a whole over, can't bowl two in a row, and is capped
-        # at overs/5. With 11 possible bowlers the cap is always satisfiable, so
-        # the fallbacks below are just crash-insurance for pathological rosters.
+        # at overs/5. With 11 distinct bowlers the cap can always be met.
         candidates = [
             (b, i) for i, b in enumerate(bowling_team) if bowler_overs[b] < max_overs_per_bowler and b != last
         ]
-        if not candidates:
-            candidates = [(b, i) for i, b in enumerate(bowling_team) if b != last]
-        if not candidates:
-            candidates = [(b, i) for i, b in enumerate(bowling_team)]
         weights = [_bowling_weight(i) for _, i in candidates]
         return random.choices(candidates, weights=weights)[0][0]
 
@@ -106,6 +103,7 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
             outcome = random.choices(OUTCOMES, weights=_batting_weights(striker))[0]
 
             if outcome == "wicket":
+                wickets += 1  # before the commentary, which carries the running score
                 dismissal = random.choice(["bowled", "caught", "run out"])
                 if dismissal == "run out":
                     fielder = random.choice(bowling_team)
@@ -125,7 +123,6 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
                             f"{emojis.WICKET} WICKET! {batsman} c {fielder} b {bowler} for {player_scores[batsman]}.",
                             "wicket",
                         )
-                wickets += 1
                 # ponytail: the striker is always the one dismissed (incl. run-outs);
                 # modelling who's at the danger end isn't worth it for a sim.
                 if next_in <= 10:
@@ -141,7 +138,7 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
                 elif outcome == "six":
                     emit(f"💥 SIX! {batsman} goes big!", "boundary")
                 if 50 <= player_scores[batsman] < 100 and batsman not in fifty_highlighted:
-                    emit(f"⭐ FIFTY! {batsman} brings up his 50.", "milestone")
+                    emit(f"⭐ FIFTY! {batsman} reaches 50.", "milestone")
                     fifty_highlighted.add(batsman)
                 elif player_scores[batsman] >= 100 and batsman not in hundred_highlighted:
                     emit(f"🌟 CENTURY! {batsman} reaches 100!", "milestone")
@@ -150,27 +147,14 @@ def simulate_innings(batting_team, bowling_team, overs, max_overs_per_bowler, ta
                     striker, non_striker = non_striker, striker
 
             if target is not None and runs > target:
-                chased = True
                 emit(f"🎉 Chased down! {runs}/{wickets}.", "milestone")
-                overs_played = balls_bowled // 6 + (balls_bowled % 6) / 10
-                return (
-                    runs,
-                    wickets,
-                    player_scores,
-                    player_wickets,
-                    events,
-                    chased,
-                    overs_played,
-                    balls_faced,
-                    bowling,
-                )
+                return result()
 
         striker, non_striker = non_striker, striker  # end of the over: strike rotates
         if wickets < 10:
             emit(f"End of over {balls_bowled // 6}: {runs}/{wickets}.", "over")
 
-    overs_played = balls_bowled // 6 + (balls_bowled % 6) / 10
-    return runs, wickets, player_scores, player_wickets, events, chased, overs_played, balls_faced, bowling
+    return result()
 
 
 def get_top_performers(player_scores, player_wickets, balls_faced, bowling):

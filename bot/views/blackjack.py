@@ -9,6 +9,10 @@ from bot.games.blackjack import calculate_hand, create_deck
 from bot.games.gambling import settle_blackjack
 
 
+def _cards(hand):
+    return " ".join(f"`{'A' if card == 11 else card}`" for card in hand)
+
+
 class BlackjackView(discord.ui.View):
     def __init__(self, player, *, bot, bet=0, stake=None):
         super().__init__(timeout=180.0)
@@ -60,9 +64,9 @@ class BlackjackView(discord.ui.View):
         player_score = calculate_hand(self.player_hand)
         dealer_score = calculate_hand(self.dealer_hand[:1])
         embed = discord.Embed(title="Blackjack", color=discord.Color.green())
-        embed.add_field(name="Your Hand", value=f"{self.player_hand} (Score: {player_score})", inline=False)
+        embed.add_field(name="Your Hand", value=f"{_cards(self.player_hand)} (Score: {player_score})", inline=False)
         embed.add_field(
-            name="Dealer's Hand", value=f"{self.dealer_hand[:1]} [?] (Score: {dealer_score}?)", inline=False
+            name="Dealer's Hand", value=f"{_cards(self.dealer_hand[:1])} `?` (Score: {dealer_score}+)", inline=False
         )
         return embed
 
@@ -72,16 +76,20 @@ class BlackjackView(discord.ui.View):
         color = 0x00FF00 if "you win" in lower else 0x808080 if "tie" in lower else 0xFF0000
         embed = discord.Embed(title="Blackjack", color=color)
         embed.add_field(
-            name="Your Hand", value=f"{self.player_hand} (Score: {calculate_hand(self.player_hand)})", inline=False
+            name="Your Hand",
+            value=f"{_cards(self.player_hand)} (Score: {calculate_hand(self.player_hand)})",
+            inline=False,
         )
         embed.add_field(
-            name="Dealer's Hand", value=f"{self.dealer_hand} (Score: {calculate_hand(self.dealer_hand)})", inline=False
+            name="Dealer's Hand",
+            value=f"{_cards(self.dealer_hand)} (Score: {calculate_hand(self.dealer_hand)})",
+            inline=False,
         )
         embed.add_field(name="Result", value=result, inline=False)
         if self.bet:
             credit = settle_blackjack(result, self.bet)
             if credit:
-                self.bot.economy.add_coins(self.player.id, str(self.player), credit)
+                self.bot.economy.add_coins(self.player.id, str(self.player), credit, "blackjack")
             self._close_stake()
             net = credit - self.bet
             if net > 0:
@@ -90,7 +98,8 @@ class BlackjackView(discord.ui.View):
                 coins_text = f"Push, your bet was returned {emojis.COIN}"
             else:
                 coins_text = f"You lost **{self.bet}** MiniCoins {emojis.COIN}"
-            embed.add_field(name="MiniCoins", value=coins_text, inline=False)
+            line = self.bot.wager_line(self.player, self.bet)
+            embed.add_field(name="MiniCoins", value=f"{coins_text}\n{line}" if line else coins_text, inline=False)
         self.settled = True
         self.stop()
         return embed
@@ -103,7 +112,7 @@ class BlackjackView(discord.ui.View):
     def refund(self):
         """Hand the bet back, for a table that never reached the channel."""
         if self.bet and not self.settled:
-            self.bot.economy.add_coins(self.player.id, str(self.player), self.bet)
+            self.bot.economy.add_coins(self.player.id, str(self.player), self.bet, "blackjack")
             self._close_stake()
         self.settled = True
         self.stop()

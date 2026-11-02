@@ -16,15 +16,19 @@ ENERGY_REGEN = 1
 BLEED_DAMAGE = 5
 POISON_DAMAGE = 5
 WEAKEN_AMOUNT = 6
-EMPOWER_AMOUNT = 6
-EXECUTE_THRESHOLD = 30  # Finisher gets its bonus against a target at or below this HP
+EMPOWER_AMOUNT = 8
+EXECUTE_THRESHOLD = 30  # Finisher gets its bonus against a target at or below this percent of max HP
 EXECUTE_BONUS = 30
 MAX_TURNS = 40  # anti-stall: past this many half-turns the duel is called on HP ratio
 MOMENTUM_MAX = 5  # stack cap
 MOMENTUM_ATTACK = 2  # attack per momentum stack, so aggression ramps
-MOMENTUM_RESETTERS = ("guard", "mend", "focus")  # turtling drops your momentum
+MOMENTUM_RESETTERS = ("guard", "mend")  # turtling drops your momentum
 RIPOSTE_DAMAGE = 12  # dealt to an attacker whose hit gets absorbed by a riposte shield
-RUPTURE_PER_TURN = 7  # damage per bleed/poison turn consumed by Rupture
+RUPTURE_PER_TURN = 8  # damage per bleed/poison turn consumed by Rupture
+EXPOSE_AMOUNT = 5  # extra damage from every hit taken while exposed
+VENGEANCE_DIVISOR = 4  # Vengeance gains 1 damage per this many percent of your HP missing
+SECOND_MOVER_ENERGY = 2  # player duels only: going first otherwise wins about 60-65% of even matches
+LAST_STAND_PERCENT = 10  # Phoenix Charm leaves you on this percent of max HP
 
 # Sentinel returned by step() as the "winner" when a duel is called as a tie at the
 # turn cap. The cog treats it as a refunded, no-XP draw.
@@ -34,6 +38,8 @@ DRAW = object()
 BASE_HP = 100
 BASE_ENERGY = 6
 HP_PER_LEVEL = 8
+HP_LEVEL_CAP = 20  # levels past this add no HP, and ranked gives everyone this level's HP
+WAGER_RAKE_PERCENT = 5  # the house's cut of a wagered duel's pot
 XP_PER_LEVEL = 100
 START_RATING = 1000
 RANK_MAX_GAP = 400  # ranked is blocked if ratings differ by more than this
@@ -63,6 +69,7 @@ class Ability:
     damage: int = 0
     shield: int = 0
     heal: int = 0
+    heal_pct: int = 0  # more healing, as a percent of max HP, so it keeps up with gear and levels
     energy: int = 0  # energy granted to the user
     bleed: int = 0  # bleed turns applied to the target
     poison: int = 0  # poison turns applied to the target
@@ -72,12 +79,19 @@ class Ability:
     lifesteal: bool = False  # heal half of damage dealt
     execute: bool = False  # bonus damage to a low-HP target
     cooldown: int = 0  # turns before it can be used again (0 = none)
-    hits: int = 1  # damage applies this many times (attack and defense count per hit)
+    hits: int = 1  # damage applies this many times, each hit weaker: full, half, a third
     shatter: bool = False  # destroy ALL target shield before dealing damage
     cleanse: bool = False  # clear the user's own bleed, poison, and weaken
     rupture: bool = False  # consume the target's bleed/poison turns for burst damage
     desperate: bool = False  # only usable below half HP
     riposte: bool = False  # if the granted shield absorbs a hit, the attacker takes damage
+    pierce: bool = False  # ignores the target's defense and shield
+    recoil: int = 0  # damage the user takes for using it (never below 1 HP)
+    evade: bool = False  # the next hit against the user before their next turn misses
+    unleash: int = 0  # bonus damage per momentum stack, spending all of them
+    sap: int = 0  # energy the target loses
+    expose: int = 0  # turns the target takes EXPOSE_AMOUNT more from every hit
+    vengeance: bool = False  # hits harder the more HP the user has lost
     desc: str = ""
 
 
@@ -95,18 +109,28 @@ ABILITIES = {
     "guard": Ability("Guard", cost=1, cooldown=2, shield=22, desc="A shield that soaks a Heavy Blow."),
     "heavy": Ability("Heavy Blow", cost=3, damage=22, desc="The efficient workhorse hit."),
     "bleed": Ability("Bleeding Cut", cost=2, damage=6, bleed=3, desc="Light hit plus bleed over time."),
-    "mend": Ability("Mend", cost=3, price=500, cooldown=3, heal=24, desc="Heal yourself."),
-    "concuss": Ability(
-        "Concussive Blow", cost=4, price=900, cooldown=4, damage=10, stun=True, desc="Damage and stun a turn."
+    "mend": Ability(
+        "Mend", cost=3, price=500, cooldown=3, heal=16, heal_pct=15, desc="Heal 16, plus 15% of your max HP."
     ),
-    "venom": Ability("Venom", cost=2, price=500, poison=4, desc="Heavy damage over time, ignores shields."),
+    "concuss": Ability(
+        "Concussive Blow", cost=4, price=900, cooldown=5, damage=10, stun=True, desc="Damage and stun a turn."
+    ),
+    "venom": Ability(
+        "Venom", cost=2, price=500, damage=2, poison=4, desc="A light hit plus heavy poison, which ignores shields."
+    ),
     "cripple": Ability("Cripple", cost=2, price=600, damage=5, weaken=3, desc="Lower the target's attack."),
-    "sharpen": Ability("Sharpen", cost=1, price=600, cooldown=3, empower=3, desc="Raise your own attack."),
+    "sharpen": Ability("Sharpen", cost=1, price=600, cooldown=3, empower=3, desc="+8 attack on your next 2 turns."),
     "drain": Ability(
-        "Drain", cost=3, price=900, cooldown=2, damage=14, lifesteal=True, desc="Hit and heal off the damage."
+        "Drain", cost=3, price=900, cooldown=2, damage=12, lifesteal=True, desc="Hit and heal half the damage."
     ),
     "finisher": Ability(
-        "Finisher", cost=5, price=1200, cooldown=2, damage=18, execute=True, desc="Devastating against low-HP foes."
+        "Finisher",
+        cost=4,
+        price=1200,
+        cooldown=2,
+        damage=18,
+        execute=True,
+        desc="30 extra damage to a target under 30% HP.",
     ),
     # Synergy archetypes (Phase C): each is a decision point in a counter-web, not a stat stick.
     "rupture": Ability(
@@ -114,7 +138,7 @@ ABILITIES = {
         cost=2,
         price=800,
         rupture=True,
-        desc="Burst the target's bleed and poison: 7 damage per turn consumed.",
+        desc="Burst the target's bleed and poison: 8 damage per turn consumed.",
     ),
     "shatter": Ability(
         "Shatter", cost=3, price=900, damage=12, shatter=True, desc="Destroy ALL of the target's shield, then hit."
@@ -123,17 +147,17 @@ ABILITIES = {
         "Ward",
         cost=2,
         price=800,
-        shield=8,
+        shield=14,
         cleanse=True,
-        desc="Cleanse your own bleed, poison, and weaken, plus a small shield.",
+        desc="Clear your own bleed, poison, weaken and exposure, plus a small shield.",
     ),
     "twinstrike": Ability(
         "Twinstrike",
         cost=2,
         price=700,
-        damage=7,
+        damage=9,
         hits=2,
-        desc="Two hits of 7. Your attack counts twice, so does their defense.",
+        desc="Two quick hits: 9, then half that. Their defense counts against each.",
     ),
     "adrenaline": Ability(
         "Adrenaline",
@@ -152,6 +176,54 @@ ABILITIES = {
         riposte=True,
         desc="Shield up. If it blocks anything before your next turn, the attacker takes 12.",
     ),
+    # A second counter-web: each one answers something the older abilities had no reply to.
+    "pierce": Ability(
+        "Piercing Thrust",
+        cost=3,
+        price=1500,
+        cooldown=2,
+        damage=14,
+        pierce=True,
+        desc="14 damage that goes straight through defense and shields.",
+    ),
+    "reckless": Ability(
+        "Reckless Swing", cost=2, price=1000, damage=20, recoil=6, desc="A big cheap hit, but you take 6 yourself."
+    ),
+    "sidestep": Ability(
+        "Sidestep",
+        cost=1,
+        price=1200,
+        cooldown=3,
+        evade=True,
+        desc="The next hit misses, its effects too, and costs them their momentum. A second hit and wounds still land.",
+    ),
+    "unleash": Ability(
+        "Unleash",
+        cost=2,
+        price=1500,
+        damage=6,
+        unleash=4,
+        desc="Spend all your momentum for 4 extra damage per stack.",
+    ),
+    "siphon": Ability(
+        "Siphon", cost=1, price=1000, cooldown=3, damage=4, sap=2, desc="A light hit that drains 2 of their energy."
+    ),
+    "expose": Ability(
+        "Expose",
+        cost=2,
+        price=1200,
+        damage=4,
+        expose=4,
+        desc="A light hit. For their next 3 turns, every hit on them deals 5 more.",
+    ),
+    "vengeance": Ability(
+        "Vengeance",
+        cost=3,
+        price=1500,
+        damage=6,
+        vengeance=True,
+        desc="6 damage, plus 1 for every 4% of your HP that's gone.",
+    ),
 }
 STARTER_ABILITIES = [aid for aid, ab in ABILITIES.items() if ab.price == 0 and aid != "strike"]
 DEFAULT_LOADOUT = ["focus", "guard", "heavy", "bleed"]
@@ -167,20 +239,21 @@ GEAR = {
     "power_band": {"slot": "accessory", "name": "Power Band", "price": 400, "max_energy": 1},
     "battle_charm": {"slot": "accessory", "name": "Battle Charm", "price": 1200, "max_energy": 2, "attack": 3},
     # Top-tier sidegrades (Phase C): horizontal choices, not strictly better.
-    "duelist_rapier": {"slot": "weapon", "name": "Duelist Rapier", "price": 1500, "attack": 8, "max_energy": 1},
-    "berserker_axe": {"slot": "weapon", "name": "Berserker Axe", "price": 1500, "attack": 16, "max_hp": -15},
+    "duelist_rapier": {"slot": "weapon", "name": "Duelist Rapier", "price": 1500, "attack": 11, "max_energy": 2},
+    "berserker_axe": {"slot": "weapon", "name": "Berserker Axe", "price": 1500, "attack": 14, "max_hp": -20},
     "spellwoven_cloak": {
         "slot": "armor",
         "name": "Spellwoven Cloak",
         "price": 1500,
-        "defense": 3,
-        "max_hp": 20,
+        "defense": 6,
+        "max_hp": 60,
         "max_energy": 1,
     },
     "momentum_locket": {
         "slot": "accessory",
         "name": "Momentum Locket",
         "price": 1200,
+        "attack": 3,
         "keep_momentum": True,
         "desc": "Keep 1 momentum stack when it resets",
     },
@@ -188,10 +261,76 @@ GEAR = {
         "slot": "accessory",
         "name": "Regen Ring",
         "price": 1200,
-        "regen": 2,
-        "desc": "+2 HP at the start of each of your turns",
+        "regen": 3,
+        "desc": "+3 HP at the start of each of your turns",
+    },
+    # Passive gear: each one opens a build rather than adding bigger numbers.
+    "vampiric_blade": {
+        "slot": "weapon",
+        "name": "Vampiric Blade",
+        "price": 3000,
+        "attack": 8,
+        "leech": 25,
+        "desc": "Heal a quarter of the damage your hits deal",
+    },
+    "serrated_edge": {
+        "slot": "weapon",
+        "name": "Serrated Edge",
+        "price": 3000,
+        "attack": 11,
+        "dot_bonus": 1,
+        "desc": "Your bleed and poison last a turn longer",
+    },
+    "sundering_maul": {
+        "slot": "weapon",
+        "name": "Sundering Maul",
+        "price": 3000,
+        "attack": 9,
+        "armor_pen": 3,
+        "desc": "Your hits ignore 3 of their defense",
+    },
+    "thornmail": {
+        "slot": "armor",
+        "name": "Thornmail",
+        "price": 3000,
+        "defense": 5,
+        "max_hp": 25,
+        "thorns": 4,
+        "desc": "Anyone who hits you takes 4 per hit",
+    },
+    "juggernaut_plate": {
+        "slot": "armor",
+        "name": "Juggernaut Plate",
+        "price": 3000,
+        "defense": 9,
+        "max_hp": 25,
+        "max_energy": -1,
+    },
+    "phoenix_charm": {
+        "slot": "accessory",
+        "name": "Phoenix Charm",
+        "price": 3000,
+        "last_stand": True,
+        "desc": "Once per duel, a killing hit leaves you on 10% HP instead",
+    },
+    "war_drum": {
+        "slot": "accessory",
+        "name": "War Drum",
+        "price": 3000,
+        "start_momentum": 3,
+        "desc": "Start every duel with 3 momentum",
+    },
+    "aegis_pendant": {
+        "slot": "accessory",
+        "name": "Aegis Pendant",
+        "price": 3000,
+        "start_shield": 30,
+        "desc": "Start every duel behind a 30 point shield",
     },
 }
+
+# Gear passives that add up across slots and carry onto the Combatant by name.
+PASSIVES = ("regen", "leech", "dot_bonus", "armor_pen", "thorns", "start_momentum", "start_shield")
 
 
 def enhance_cost(current_level):
@@ -225,8 +364,15 @@ class Combatant:
     stun: bool = False
     momentum: int = 0  # 🔥 stacks: +MOMENTUM_ATTACK attack each, reset by turtling
     riposte_ready: bool = False  # a riposte shield is up until this fighter's next turn
+    exposed: int = 0  # turns of taking EXPOSE_AMOUNT more from every hit
+    evading: bool = False  # the next hit misses, until this fighter's next turn
     regen: int = 0  # HP regained at each of this fighter's turn starts (gear passive)
     keep_momentum: bool = False  # keep 1 stack on momentum reset (gear passive)
+    leech: int = 0  # percent of hit damage healed (gear passive)
+    dot_bonus: int = 0  # extra turns on the bleed and poison this fighter applies (gear passive)
+    armor_pen: int = 0  # defense this fighter's hits ignore (gear passive)
+    thorns: int = 0  # damage an attacker takes per hit on this fighter (gear passive)
+    last_stand: bool = False  # survive one killing hit on 1 HP (gear passive)
     cooldowns: dict = field(default_factory=dict)  # ability id -> turns until usable again
     loadout: list = field(default_factory=lambda: list(DEFAULT_LOADOUT))
 
@@ -243,24 +389,33 @@ def level_for_xp(xp):
     return 1 + xp // XP_PER_LEVEL
 
 
+def wager_prize(bet):
+    """What the winner of a wagered duel takes: both antes less the house's cut.
+    The cut rounds down, so a pot under 20 coins pays out whole."""
+    pot = bet * 2
+    return pot - pot * WAGER_RAKE_PERCENT // 100
+
+
 def aggregate_stats(level, weapon=None, armor=None, accessory=None, gear_levels=None):
     """Combine level, equipped gear, and gear enhancement levels into combat stats.
     ``gear_levels`` maps item id -> enhancement level (missing items count as +0)."""
     stats = {
-        "max_hp": BASE_HP + (level - 1) * HP_PER_LEVEL,
+        "max_hp": BASE_HP + (min(level, HP_LEVEL_CAP) - 1) * HP_PER_LEVEL,
         "max_energy": BASE_ENERGY,
         "attack": 0,
         "defense": 0,
-        "regen": 0,
         "keep_momentum": False,
+        "last_stand": False,
+        **dict.fromkeys(PASSIVES, 0),
     }
     for item_id in (weapon, armor, accessory):
         gear = GEAR.get(item_id)
         if not gear:
             continue
-        for key in ("max_hp", "max_energy", "attack", "defense", "regen"):
+        for key in ("max_hp", "max_energy", "attack", "defense", *PASSIVES):
             stats[key] += gear.get(key, 0)
         stats["keep_momentum"] = stats["keep_momentum"] or gear.get("keep_momentum", False)
+        stats["last_stand"] = stats["last_stand"] or gear.get("last_stand", False)
         for key, bonus in enhance_bonus(gear["slot"], (gear_levels or {}).get(item_id, 0)).items():
             stats[key] += bonus
     return stats
@@ -275,13 +430,22 @@ def make_combatant(name, stats, loadout):
         energy=min(START_ENERGY, stats["max_energy"]),
         attack=stats["attack"],
         defense=stats["defense"],
+        shield=stats.get("start_shield", 0),
+        momentum=stats.get("start_momentum", 0),
         regen=stats.get("regen", 0),
         keep_momentum=stats.get("keep_momentum", False),
+        leech=stats.get("leech", 0),
+        dot_bonus=stats.get("dot_bonus", 0),
+        armor_pen=stats.get("armor_pen", 0),
+        thorns=stats.get("thorns", 0),
+        last_stand=stats.get("last_stand", False),
         loadout=[a for a in loadout if a in ABILITIES][:LOADOUT_SIZE],
     )
 
 
-def new_duel(c1, c2, first=0):
+def new_duel(c1, c2, first=0, second_energy=0):
+    second = (c1, c2)[1 - first]
+    second.energy = min(second.max_energy, second.energy + second_energy)
     return DuelState(fighters=[c1, c2], active=first, turn=1)
 
 
@@ -291,9 +455,24 @@ def _effective_attack(c):
     return c.attack + bonus + MOMENTUM_ATTACK * c.momentum
 
 
-def _deal(target, raw):
-    """Apply raw damage: reduced by defense, then soaked by shield."""
-    incoming = max(1, raw - target.defense)
+def _in_execute_range(c):
+    return c.hp * 100 <= c.max_hp * EXECUTE_THRESHOLD
+
+
+def _reset_momentum(c):
+    c.momentum = min(c.momentum, 1) if c.keep_momentum else 0
+
+
+def _deal(target, raw, armor_pen=0, pierce=False):
+    """Apply raw damage: reduced by defense, then soaked by shield. Exposure adds to
+    every hit, and a piercing one skips both defense and shield."""
+    if target.exposed:
+        raw += EXPOSE_AMOUNT
+    if pierce:
+        dealt = max(1, raw)
+        target.hp = max(0, target.hp - dealt)
+        return dealt, 0
+    incoming = max(1, raw - max(0, target.defense - armor_pen))
     absorbed = min(target.shield, incoming)
     target.shield -= absorbed
     dealt = incoming - absorbed
@@ -344,10 +523,13 @@ def _handover(state, log):
             f.weaken -= 1
         if f.empower > 0:
             f.empower -= 1
+        if f.exposed > 0:
+            f.exposed -= 1
         for aid in f.cooldowns:
             if f.cooldowns[aid] > 0:
                 f.cooldowns[aid] -= 1
         f.riposte_ready = False  # the riposte window closes at your next turn
+        f.evading = False  # and so does a sidestep
         f.energy = min(f.max_energy, f.energy + ENERGY_REGEN)
         if f.stun:
             f.stun = False
@@ -391,8 +573,9 @@ def step(state, ability_id):
     if ab.cooldown:
         actor.cooldowns[ability_id] = ab.cooldown
     dealt_total = 0
-    if ab.cleanse and (actor.bleed or actor.poison or actor.weaken):
-        actor.bleed = actor.poison = actor.weaken = 0
+    landed = not ab.damage  # a move with no hit can't be dodged
+    if ab.cleanse and (actor.bleed or actor.poison or actor.weaken or actor.exposed):
+        actor.bleed = actor.poison = actor.weaken = actor.exposed = 0
         log.append(f"{emojis.SHIELD} {actor.name} wards off their afflictions.")
     if ab.energy:
         actor.energy = min(actor.max_energy, actor.energy + ab.energy)
@@ -403,9 +586,13 @@ def step(state, ability_id):
     if ab.riposte:
         actor.riposte_ready = True
         log.append(f"↩️ {actor.name} readies a riposte.")
+    if ab.evade:
+        actor.evading = True
+        log.append(f"💨 {actor.name} gets ready to sidestep.")
     if ab.heal:
-        actor.hp = min(actor.max_hp, actor.hp + ab.heal)
-        log.append(f"{emojis.HEALTH} {actor.name} mends (+{ab.heal} HP).")
+        healed = ab.heal + actor.max_hp * ab.heal_pct // 100
+        actor.hp = min(actor.max_hp, actor.hp + healed)
+        log.append(f"{emojis.HEALTH} {actor.name} mends (+{healed} HP).")
     if ab.empower:
         actor.empower = max(actor.empower, ab.empower)
         log.append(f"🔺 {actor.name} sharpens their attack.")
@@ -414,19 +601,41 @@ def step(state, ability_id):
         target.shield = 0
     if ab.damage:
         for _hit in range(ab.hits):
-            raw = ab.damage + _effective_attack(actor)
-            if ab.execute and target.hp <= EXECUTE_THRESHOLD:
+            if target.evading:
+                target.evading = False
+                _reset_momentum(actor)
+                log.append(f"💨 {target.name} sidesteps {ab.name}!")
+                continue
+            landed = True
+            raw = (ab.damage + _effective_attack(actor)) // (_hit + 1)
+            if ab.execute and _in_execute_range(target):
                 raw += EXECUTE_BONUS
-            dealt, absorbed = _deal(target, raw)
+            raw += ab.unleash * actor.momentum
+            if ab.vengeance:
+                raw += (actor.max_hp - actor.hp) * 100 // actor.max_hp // VENGEANCE_DIVISOR
+            dealt, absorbed = _deal(target, raw, actor.armor_pen, ab.pierce)
             dealt_total += dealt
             if ab.lifesteal:
                 actor.hp = min(actor.max_hp, actor.hp + dealt // 2)
+            if actor.leech:
+                actor.hp = min(actor.max_hp, actor.hp + dealt * actor.leech // 100)
             note = f" ({absorbed} blocked)" if absorbed else ""
             log.append(f"{emojis.DUEL} {actor.name} uses {ab.name} for {dealt}{note}.")
             if absorbed and target.riposte_ready:
                 target.riposte_ready = False
                 actor.hp = max(0, actor.hp - RIPOSTE_DAMAGE)
                 log.append(f"↩️ {target.name} ripostes for {RIPOSTE_DAMAGE}!")
+            if target.thorns:
+                actor.hp = max(0, actor.hp - target.thorns)
+                log.append(f"🌵 {actor.name} takes {target.thorns} from the thorns.")
+            if target.hp <= 0 or actor.hp <= 0:
+                break  # no second hit on a corpse, and no healing back from a killing riposte
+    if ab.recoil and actor.hp > 0:
+        actor.hp = max(1, actor.hp - ab.recoil)
+        log.append(f"💢 {actor.name} takes {ab.recoil} recoil.")
+    if ab.sap and landed:
+        target.energy = max(0, target.energy - ab.sap)
+        log.append(f"{emojis.ENERGY} {target.name} loses {ab.sap} energy.")
     if ab.rupture:
         turns = target.bleed + target.poison
         if turns:
@@ -437,25 +646,33 @@ def step(state, ability_id):
             log.append(f"{emojis.BLEED} {actor.name} ruptures the wounds for {burst}.")
         else:
             log.append(f"{actor.name}'s rupture finds no wounds to burst.")
-    if ab.bleed:
-        target.bleed = max(target.bleed, ab.bleed)
+    if ab.bleed and landed:
+        target.bleed = max(target.bleed, ab.bleed + actor.dot_bonus)
         log.append(f"{emojis.BLEED} {target.name} is bleeding.")
-    if ab.poison:
-        target.poison = max(target.poison, ab.poison)
+    if ab.poison and landed:
+        target.poison = max(target.poison, ab.poison + actor.dot_bonus)
         log.append(f"{emojis.POISON} {target.name} is poisoned.")
-    if ab.weaken:
+    if ab.weaken and landed:
         target.weaken = max(target.weaken, ab.weaken)
         log.append(f"🔻 {target.name}'s attack is lowered.")
-    if ab.stun:
+    if ab.expose and landed:
+        target.exposed = max(target.exposed, ab.expose)
+        log.append(f"🎯 {target.name} is exposed.")
+    if ab.stun and landed:
         target.stun = True
         log.append(f"{emojis.STUN} {target.name} will be stunned.")
 
-    # Momentum: landing damage ramps it, turtling resets it (locket keeps 1 stack).
+    # Momentum: landing damage ramps it, turtling or Unleash spends it (locket keeps 1 stack).
     if dealt_total >= 1:
         actor.momentum = min(MOMENTUM_MAX, actor.momentum + 1)
-    if ability_id in MOMENTUM_RESETTERS and actor.momentum:
-        actor.momentum = 1 if actor.keep_momentum else 0
+    if ability_id in MOMENTUM_RESETTERS or ab.unleash:
+        _reset_momentum(actor)
 
+    for fighter in (target, actor):  # a riposte or thorns can be the killing hit too
+        if fighter.hp <= 0 and fighter.last_stand:
+            fighter.last_stand = False
+            fighter.hp = fighter.max_hp * LAST_STAND_PERCENT // 100
+            log.append(f"🪶 {fighter.name} refuses to fall!")
     if target.hp <= 0:
         return state, log, actor
     if actor.hp <= 0:  # a riposte can fell the attacker
@@ -482,7 +699,7 @@ def ai_choose(state):
         return "mend"
     if "ward" in moves and me.bleed + me.poison >= 2:
         return "ward"
-    if "finisher" in moves and opp.hp <= EXECUTE_THRESHOLD:
+    if "finisher" in moves and _in_execute_range(opp):
         return "finisher"
     if "shatter" in moves and opp.shield >= 12:
         return "shatter"

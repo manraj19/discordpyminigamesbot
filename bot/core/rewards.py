@@ -1,9 +1,7 @@
 """Shared reward result and its one-line renderer.
 
 Every game, duel, and quest payout returns a ``RewardResult`` and shows
-``line()``, so rewards look the same everywhere from a single place. Later
-systems (XP, level-ups, quests) fill the extra fields and they appear across
-every game with no per-game work.
+``line()``, so rewards look the same everywhere from a single place.
 """
 
 from dataclasses import dataclass, field
@@ -25,6 +23,7 @@ class RewardResult:
     level_up: int | None = None  # the new level number, if the action leveled the player up
     first_win_bonus: int = 0
     quests: list = field(default_factory=list)  # completed quests: [(text, coins, xp), ...]
+    notes: list = field(default_factory=list)  # lines about anyone else in the game
 
     def line(self) -> str:
         """One uniform reward line, e.g.
@@ -47,4 +46,4 @@ class RewardResult:
         for text, coins, xp in self.quests:
             xp_bit = f" **+{xp}** XP" if xp else ""
             parts.append(f"🎯 Quest: **{text}** **+{coins}**{xp_bit}")
-        return " · ".join(parts)
+        return " · ".join(parts + self.notes)

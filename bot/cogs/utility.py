@@ -1,6 +1,7 @@
 """Utility commands: dictionary lookups, profiles, leaderboards, bot info."""
 
 import datetime
+import re
 from typing import Literal
 from urllib.parse import quote
 
@@ -9,11 +10,20 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import config, embeds, emojis
-from bot.core.rewards import progress_bar
+from bot.core.rewards import RewardResult, progress_bar
 from bot.games.achievements import ACHIEVEMENTS
 from bot.games.duel import XP_PER_LEVEL
 from bot.services.economy import title_name
-from bot.services.scores import SUPPORTED_GAMES
+from bot.services.scores import SUPPORTED_GAMES, game_title
+
+
+def _clip(text, limit=1024):
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _urban_text(text, limit):
+    """Urban Dictionary text for an embed field, minus its [cross-link] brackets."""
+    return _clip(re.sub(r"[\[\]]", "", text).strip(), limit)
 
 
 class Utility(commands.Cog):
@@ -22,17 +32,15 @@ class Utility(commands.Cog):
 
     # --- dictionary ---
     async def _define(self, word):
-        url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(word)}"
+        url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(word, safe='')}"
         status, data = await self.bot.http_client.fetch_json(url)
         if status != 200 or not data or isinstance(data, dict):
             return f"No definition found for '{word[:100]}'.", None
 
         embed = discord.Embed(title=f"Definition of {word[:100]}", color=0x7289DA)
-        for meaning in data[0]["meanings"]:
+        for meaning in data[0]["meanings"][:5]:  # five full fields still fit an embed's 6000 limit
             definitions_text = "\n".join(d["definition"] for d in meaning["definitions"])
-            if len(definitions_text) > 1024:
-                definitions_text = definitions_text[:1021] + "..."
-            embed.add_field(name=meaning["partOfSpeech"], value=definitions_text, inline=False)
+            embed.add_field(name=meaning["partOfSpeech"], value=_clip(definitions_text), inline=False)
         embed.set_footer(text="🤓")
         return None, embed
 
@@ -58,15 +66,13 @@ class Utility(commands.Cog):
             return f"No definition found for '{term[:100]}'.", None
 
         embed = discord.Embed(title=f"Urban Dictionary: {term[:100]}", color=0x7289DA)
-        for i, definition in enumerate(data["list"][:5], 1):
-            def_text = definition["definition"]
-            example_text = definition["example"]
-            if len(def_text) > 1024:
-                def_text = def_text[:1021] + "..."
-            if len(example_text) > 1024:
-                example_text = example_text[:1021] + "..."
-            embed.add_field(name=f"Definition {i}", value=def_text, inline=False)
-            embed.add_field(name="Example", value=example_text, inline=False)
+        for i, definition in enumerate(data["list"][:5], 1):  # these clips keep all five under the 6000 limit
+            embed.add_field(
+                name=f"Definition {i}", value=_urban_text(definition["definition"], 600) or "?", inline=False
+            )
+            example = _urban_text(definition["example"], 400)
+            if example:
+                embed.add_field(name="Example", value=example, inline=False)
         embed.set_footer(text="If this shows something offensive, it's not my fault. Blame Urban Dictionary.")
         return None, embed
 
@@ -87,14 +93,18 @@ class Utility(commands.Cog):
     # --- leaderboard (global by default, opt-in per server) ---
     def _leaderboard(self, game, guild_id):
         game = game.lower()
+        command = self.bot.get_command(game)  # aliases count, so ;lb c4 works like ;c4 does
+        game = command.name if command else game
         if game not in SUPPORTED_GAMES:
             return "Supported leaderboards: " + ", ".join(SUPPORTED_GAMES) + ".", None
         rows = self.bot.scores.top(game, guild_id, 10)
         if not rows:
             where = " on this server" if guild_id else ""
-            return f"No scores yet for {game}{where}.", None
-        description = "\n".join(f"{i}. {username}: {score}" for i, (username, score) in enumerate(rows, 1))
-        embed = embeds.branded(title=f"{game.capitalize()} Leaderboard", description=description)
+            return f"No scores yet for {game_title(game)}{where}.", None
+        description = "\n".join(
+            f"{i}. {discord.utils.escape_markdown(username)}: {score}" for i, (username, score) in enumerate(rows, 1)
+        )
+        embed = embeds.branded(title=f"{game_title(game)} Leaderboard", description=description)
         embed.set_footer(text="This server" if guild_id else "Global, all servers")
         return None, embed
 
@@ -106,7 +116,7 @@ class Utility(commands.Cog):
 
     @app_commands.command(name="leaderboard", description="View a game's leaderboard (global, or this server)")
     @app_commands.describe(game="Which game's leaderboard to view", scope="Global (default) or this server")
-    @app_commands.choices(game=[app_commands.Choice(name=g, value=g) for g in SUPPORTED_GAMES])
+    @app_commands.choices(game=[app_commands.Choice(name=game_title(g), value=g) for g in SUPPORTED_GAMES])
     async def leaderboard_slash(
         self, interaction: discord.Interaction, game: str, scope: Literal["global", "server"] = "global"
     ):
@@ -116,7 +126,7 @@ class Utility(commands.Cog):
 
     # --- profile (overall, across all servers) ---
     def _profile(self, user):
-        self.bot.award_achievements(user.id, str(user))  # keep achievements current
+        unlocked = RewardResult(new_achievements=self.bot.award_achievements(user.id, str(user))).line()
         embed = embeds.branded(title=f"{user}'s Game Profile")
         title_id = self.bot.economy.equipped_title(user.id)
         if title_id:
@@ -128,7 +138,7 @@ class Utility(commands.Cog):
                 value = "Score: N/A\nRank: N/A"
             else:
                 value = f"Score: {score}\nRank: {self.bot.scores.rank(game, score)}"
-            embed.add_field(name=game.capitalize(), value=value, inline=True)
+            embed.add_field(name=game_title(game), value=value, inline=True)
         rec = self.bot.duel.get_or_create(user.id, str(user))
         into = rec["xp"] % XP_PER_LEVEL
         embed.add_field(
@@ -144,6 +154,8 @@ class Utility(commands.Cog):
         )
         earned = len(self.bot.economy.earned_achievements(user.id))
         embed.add_field(name="🏅 Achievements", value=f"{earned}/{len(ACHIEVEMENTS)}", inline=True)
+        if unlocked:
+            embed.add_field(name="🎉 Just unlocked", value=unlocked, inline=False)
         embed.set_footer(text="Stats across all servers · gear and loadout in ;duelist")
         return embed
 
@@ -168,7 +180,7 @@ class Utility(commands.Cog):
             value=f"{len(self.bot.guilds)} Servers, {len(self.bot.shards)} Shards",
             inline=True,
         )
-        embed.add_field(name="Bot Latency", value=f"{round(self.bot.latency * 1000)}ms", inline=True)
+        embed.add_field(name="Bot Latency", value=f"{self.bot.latency * 1000:.0f}ms", inline=True)
         embed.add_field(name="Invite Link", value=f"[Invite the Bot]({config.INVITE_URL})", inline=False)
         embed.add_field(name="Support Server", value=f"[Join Support Server]({config.SUPPORT_SERVER})", inline=False)
         embed.add_field(name="Top.gg Page", value=f"[Vote for the Bot]({config.TOPGG_VOTE})", inline=False)

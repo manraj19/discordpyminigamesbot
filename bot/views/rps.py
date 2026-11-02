@@ -20,8 +20,13 @@ class RPSButton(discord.ui.Button):
             return
 
         view.choices[interaction.user.id] = self.choice
+        # Decided before the first await, so only the second pick can finish the game,
+        # even when both players click within one round trip.
+        last_pick = len(view.choices) == 2
+        if last_pick:
+            view.stop()
         await interaction.response.send_message(f"You chose {self.choice}.", ephemeral=True)
-        if len(view.choices) == 2:
+        if last_pick:
             await view.finish(interaction)
 
 
@@ -30,7 +35,7 @@ class RPSView(discord.ui.View):
         super().__init__(timeout=30.0)
         self.player = player
         self.opponent = opponent
-        self.on_winner = on_winner  # async callable(member) -> RewardResult
+        self.on_winner = on_winner  # async callable(winner, or None for a tie) -> RewardResult
         self.choices = {}
         self.message = None
         for choice in ("Rock", "Paper", "Scissors"):
@@ -50,13 +55,9 @@ class RPSView(discord.ui.View):
         player_choice = self.choices[self.player.id]
         opponent_choice = self.choices[self.opponent.id]
         result = winner(player_choice, opponent_choice)
-
-        if result is None:
-            outcome = "It's a tie!"
-        else:
-            champ = self.player if result == "a" else self.opponent
-            line = (await self.on_winner(champ)).line()
-            outcome = f"{champ.mention} wins!" + (f"  ·  {line}" if line else "")
+        champ = None if result is None else self.player if result == "a" else self.opponent
+        line = (await self.on_winner(champ)).line()
+        outcome = (f"{champ.mention} wins!" if champ else "It's a tie!") + (f"  ·  {line}" if line else "")
 
         self._disable()
         await interaction.followup.send(
@@ -65,7 +66,6 @@ class RPSView(discord.ui.View):
         if self.message:
             with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
-        self.stop()
 
     async def on_timeout(self):
         self._disable()

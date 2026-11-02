@@ -9,7 +9,13 @@ from discord.ext import commands
 
 GAME = "guessnumber"
 LOW, HIGH = 1, 1000
+MAX_TRIES = 10  # just enough for a clean binary search over 1-1000, so sloppy play can lose
 GUESS_TIMEOUT = 60.0
+
+
+def _is_guess(text):
+    text = text.strip()
+    return text.isdecimal() and LOW <= int(text) <= HIGH
 
 
 class GuessNumber(commands.Cog):
@@ -21,29 +27,33 @@ class GuessNumber(commands.Cog):
 
     async def _run(self, channel, player):
         secret = random.randint(LOW, HIGH)
-        await channel.send(f"🔢 I'm thinking of a number between **{LOW}** and **{HIGH}**. Start guessing!")
+        await channel.send(
+            f"🔢 I'm thinking of a number between **{LOW}** and **{HIGH}**. You get **{MAX_TRIES}** guesses. Go!"
+        )
 
-        attempts = 0
-        while True:
+        for attempt in range(1, MAX_TRIES + 1):
             try:
                 msg = await self.bot.wait_for(
                     "message",
-                    check=lambda m: m.author == player and m.channel == channel and m.content.strip().isdecimal(),
+                    check=lambda m: m.author == player and m.channel == channel and _is_guess(m.content),
                     timeout=GUESS_TIMEOUT,
                 )
             except asyncio.TimeoutError:
                 await channel.send(f"⏰ Time's up! The number was **{secret}**.")
                 return
 
-            attempts += 1
             guess = int(msg.content.strip())
             if guess == secret:
-                tries = "guess" if attempts == 1 else "guesses"
-                await channel.send(f"🎉 Got it in **{attempts}** {tries}! The number was **{secret}**.")
+                tries = "guess" if attempt == 1 else "guesses"
+                await channel.send(f"🎉 Got it in **{attempt}** {tries}! The number was **{secret}**.")
                 result = self.bot.reward(player, 1, GAME)
                 await channel.send(result.line())
                 return
-            await channel.send("Go higher ⬆️" if guess < secret else "Go lower ⬇️")
+            if attempt < MAX_TRIES:
+                hint = "Go higher ⬆️" if guess < secret else "Go lower ⬇️"
+                await channel.send(f"{hint} · **{MAX_TRIES - attempt}** left")
+
+        await channel.send(f"😵 Out of guesses! The number was **{secret}**.")
 
     @commands.command(aliases=["gn", "higherlower"])
     @commands.cooldown(1, 10, commands.BucketType.user)

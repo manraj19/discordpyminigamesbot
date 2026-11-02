@@ -6,13 +6,17 @@ the table stays tiny regardless of traffic.
 """
 
 import datetime
-import sqlite3
+
+from bot.services.db import connect
+
+
+def _today():
+    return datetime.datetime.now(datetime.timezone.utc).date()
 
 
 class UsageService:
     def __init__(self, db_path="scores.db"):
-        self._conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn = connect(db_path)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS usage ("
             "day TEXT, command TEXT, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, command))"
@@ -20,7 +24,7 @@ class UsageService:
         self._conn.commit()
 
     def record(self, command, day=None):
-        day = day or datetime.date.today().isoformat()
+        day = day or _today().isoformat()
         self._conn.execute(
             "INSERT INTO usage (day, command, count) VALUES (?, ?, 1) "
             "ON CONFLICT(day, command) DO UPDATE SET count = count + 1",
@@ -29,7 +33,7 @@ class UsageService:
         self._conn.commit()
 
     def _cutoff(self, days):
-        return (datetime.date.today() - datetime.timedelta(days=days - 1)).isoformat()
+        return (_today() - datetime.timedelta(days=days - 1)).isoformat()
 
     def top(self, days=7, limit=20):
         """Return [(command, total), ...] over the last ``days`` days, most used first."""

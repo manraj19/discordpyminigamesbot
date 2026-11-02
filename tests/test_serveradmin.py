@@ -4,7 +4,7 @@ switched-off channels (;disable)."""
 from types import SimpleNamespace
 
 from bot.core import config
-from bot.core.checks import _turned_off, game_channel_block, join_and, live_pins
+from bot.core.checks import _off_note, _turned_off, game_channel_block, join_and, live_pins
 from bot.services.channel_lock import ChannelLockService
 
 C4_ROOM, GAMES_ROOM, GENERAL = 1, 2, 3
@@ -93,7 +93,9 @@ def test_switched_off_channels_and_their_way_back_on():
         assert _turned_off(client, room, _member(), "enable")  # players can't flip it back
         assert _turned_off(client, room, _member(admin=True), "connect4")  # admins are switched off too
         assert not _turned_off(client, room, _member(admin=True), "enable")  # but can always turn it back on
-        assert not _turned_off(client, room, _member(config.OWNER_ID), "connect4")  # the owner is exempt
+        assert _turned_off(client, room, _member(config.OWNER_ID), "sync")  # so is the owner, even for owner commands
+        assert not _turned_off(client, room, _member(config.OWNER_ID), "enable")  # no admin role needed to undo it
+        assert "enable" in _off_note(_member(config.OWNER_ID), ";")  # and the owner gets told why, not silence
     finally:
         lock.close()
 

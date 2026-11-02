@@ -7,13 +7,12 @@ Both are cached in memory, so the per-command check is a dict lookup, not a
 query.
 """
 
-import sqlite3
+from bot.services.db import connect
 
 
 class ChannelLockService:
     def __init__(self, db_path="scores.db"):
-        self._conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")  # concurrent readers with one writer, safer on crash
+        self._conn = connect(db_path)
         self._conn.execute("CREATE TABLE IF NOT EXISTS disabled_channels (channel_id INTEGER PRIMARY KEY)")
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS game_channels ("

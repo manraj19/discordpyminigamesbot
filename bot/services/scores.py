@@ -3,14 +3,9 @@
 A single place for all reads/writes against ``scores.db``. Scores are tracked
 per server (``guild_id``), so each guild has its own leaderboard; DMs fall into
 bucket 0. An older global ``scores`` table is migrated into bucket 0 on startup.
-
-NOTE: this is synchronous sqlite3 for now. SQLite writes are sub-millisecond at
-this data size, so they don't meaningfully block the loop; migrating this class
-to ``aiosqlite`` (or wrapping calls in ``asyncio.to_thread``) is the planned next
-step and would not change its public interface.
 """
 
-import sqlite3
+from bot.services.db import connect
 
 # Games where only a personal best is kept; everything else accumulates.
 NON_CUMULATIVE_GAMES = {"dino", "flagle", "mathematics"}
@@ -33,6 +28,21 @@ SUPPORTED_GAMES = [
     # leaderboards and profiles.
 ]
 
+# How a game's name reads on a leaderboard or profile, where it isn't just capitalized.
+_TITLES = {
+    "connect4": "Connect 4",
+    "rockpaperscissors": "Rock Paper Scissors",
+    "tictactoe": "Tic-Tac-Toe",
+    "wordguess": "Word Guess",
+    "emojiguess": "Emoji Guess",
+    "bombparty": "Bomb Party",
+}
+
+
+def game_title(game):
+    return _TITLES.get(game, game.capitalize())
+
+
 _SCHEMA = """CREATE TABLE {name} (
     user_id INTEGER,
     username TEXT,
@@ -45,8 +55,7 @@ _SCHEMA = """CREATE TABLE {name} (
 
 class ScoreService:
     def __init__(self, db_path="scores.db"):
-        self._conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")  # concurrent readers with one writer, safer on crash
+        self._conn = connect(db_path)
         self._conn.execute(_SCHEMA.format(name="IF NOT EXISTS scores"))
         cols = [r[1] for r in self._conn.execute("PRAGMA table_info(scores)")]
         if "guild_id" not in cols:
@@ -63,28 +72,12 @@ class ScoreService:
     def record_result(self, user_id, username, score, game, guild_id=0):
         """Record a game result for a server: non-cumulative games keep the best
         score, others accumulate."""
-        cur = self._conn.cursor()
-        row = cur.execute(
-            "SELECT score FROM scores WHERE user_id = ? AND game = ? AND guild_id = ?",
-            (user_id, game, guild_id),
-        ).fetchone()
-
-        if row is None:
-            cur.execute(
-                "INSERT INTO scores (user_id, username, score, game, guild_id) VALUES (?, ?, ?, ?, ?)",
-                (user_id, username, score, game, guild_id),
-            )
-        elif game in NON_CUMULATIVE_GAMES:
-            if score > row[0]:
-                cur.execute(
-                    "UPDATE scores SET score = ?, username = ? WHERE user_id = ? AND game = ? AND guild_id = ?",
-                    (score, username, user_id, game, guild_id),
-                )
-        else:
-            cur.execute(
-                "UPDATE scores SET score = ?, username = ? WHERE user_id = ? AND game = ? AND guild_id = ?",
-                (row[0] + score, username, user_id, game, guild_id),
-            )
+        new_score = "MAX(score, excluded.score)" if game in NON_CUMULATIVE_GAMES else "score + excluded.score"
+        self._conn.execute(
+            "INSERT INTO scores (user_id, username, score, game, guild_id) VALUES (?, ?, ?, ?, ?) "
+            f"ON CONFLICT(user_id, game, guild_id) DO UPDATE SET username = excluded.username, score = {new_score}",
+            (user_id, username, score, game, guild_id),
+        )
         self._conn.commit()
 
     def _agg(self, game):
@@ -98,11 +91,12 @@ class ScoreService:
         if guild_id is None:
             return self._conn.execute(
                 f"SELECT username, {self._agg(game)}(score) AS s FROM scores WHERE game = ? "
-                "GROUP BY user_id ORDER BY s DESC LIMIT ?",
+                "GROUP BY user_id HAVING s > 0 ORDER BY s DESC LIMIT ?",
                 (game, limit),
             ).fetchall()
         return self._conn.execute(
-            "SELECT username, score FROM scores WHERE game = ? AND guild_id = ? ORDER BY score DESC LIMIT ?",
+            "SELECT username, score FROM scores WHERE game = ? AND guild_id = ? AND score > 0 "
+            "ORDER BY score DESC LIMIT ?",
             (game, guild_id, limit),
         ).fetchall()
 

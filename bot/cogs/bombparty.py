@@ -23,7 +23,6 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import emojis
-from bot.core.rewards import RewardResult
 from bot.core.utils import run_countdown
 from bot.games.bombparty import (
     MIN_PLAYERS,
@@ -92,7 +91,7 @@ class BombParty(commands.Cog):
             # notified. It carries the live countdown and is swept with the turn.
             note = f"{holder.mention} you're up! Find a word with **{game.prompt.upper()}** in it."
             ping = await channel.send(f"{note}  ⏳ **{allowance}s**")
-            ticker = asyncio.create_task(run_countdown(ping, allowance, note))
+            ticker = asyncio.create_task(run_countdown(ping, allowance, note, step=2))
             try:
                 word, attempts = await self._await_word(channel, holder, game, time.time() + allowance)
             finally:
@@ -202,11 +201,8 @@ class BombParty(commands.Cog):
         if result.line():
             lines.append(result.line())
         for pid in game.players:
-            if pid == champion.id:
-                continue
             member = by_id[pid]
-            quests, level_up, bonus = self.bot.quest_event(pid, str(member), "game_play", 1)
-            played = RewardResult(coins=bonus, level_up=level_up, quests=quests).line()
+            played = self.bot.count_played(member)
             if played:
                 lines.append(f"{member.display_name}: {played}")
         await channel.send("\n".join(lines))

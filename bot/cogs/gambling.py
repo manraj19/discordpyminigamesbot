@@ -9,8 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core import emojis
-from bot.core.rewards import RewardResult
-from bot.games.gambling import slot_return, spin_slots
+from bot.games.gambling import coinflip_winnings, slot_return, spin_slots
 
 REVEAL_DELAY = 0.8  # seconds between each slot reel locking in
 
@@ -20,10 +19,8 @@ class Gambling(commands.Cog):
         self.bot = bot
 
     def _wager_suffix(self, user, bet):
-        """Count the wager toward quests and return any completed-quest line to
-        append to the result message (empty string when nothing completed)."""
-        quests, level_up, bonus = self.bot.quest_event(user.id, str(user), "wager", bet)
-        line = RewardResult(coins=bonus, level_up=level_up, quests=quests).line()
+        """The reward line for a settled wager, to append to the result message."""
+        line = self.bot.wager_line(user, bet)
         return f"\n{line}" if line else ""
 
     # --- coinflip ---
@@ -37,14 +34,16 @@ class Gambling(commands.Cog):
             return "Choose `heads` or `tails`."
         if bet <= 0:
             return "Your bet must be a positive number of MiniCoins."
-        if not self.bot.economy.spend(user.id, bet):
+        if not self.bot.economy.spend(user.id, bet, "coinflip"):
             return "You don't have enough MiniCoins for that bet."
-        suffix = self._wager_suffix(user, bet)
         result = random.choice(["heads", "tails"])
         if result == side:
-            self.bot.economy.add_coins(user.id, str(user), bet * 2)
-            return f"{emojis.COIN} It landed **{result}**. You won **+{bet}** MiniCoins!{suffix}"
-        return f"{emojis.COIN} It landed **{result}**. You lost **{bet}** MiniCoins.{suffix}"
+            winnings = coinflip_winnings(bet)
+            self.bot.economy.add_coins(user.id, str(user), bet + winnings, "coinflip")
+            outcome = f"You won **+{winnings}** MiniCoins!"
+        else:
+            outcome = f"You lost **{bet}** MiniCoins."
+        return f"{emojis.COIN} It landed **{result}**. {outcome}{self._wager_suffix(user, bet)}"
 
     @commands.command(aliases=["cf"])
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -60,17 +59,17 @@ class Gambling(commands.Cog):
     def _take_slots_bet(self, user, bet):
         if bet <= 0:
             return "Your bet must be a positive number of MiniCoins."
-        if not self.bot.economy.spend(user.id, bet):
+        if not self.bot.economy.spend(user.id, bet, "slots"):
             return "You don't have enough MiniCoins for that bet."
         return None
 
     def _slots_outcome(self, user, bet, reels):
         returned = slot_return(reels, bet)
         if returned > bet:
-            self.bot.economy.add_coins(user.id, str(user), returned)
+            self.bot.economy.add_coins(user.id, str(user), returned, "slots")
             return f"{emojis.COIN} Jackpot! You won **+{returned - bet}** MiniCoins."
         if returned == bet:
-            self.bot.economy.add_coins(user.id, str(user), returned)
+            self.bot.economy.add_coins(user.id, str(user), returned, "slots")
             return f"{emojis.COIN} Two of a kind. Your **{bet}** MiniCoins come back."
         return f"{emojis.COIN} No match. You lost **{bet}** MiniCoins."
 
@@ -81,11 +80,11 @@ class Gambling(commands.Cog):
         if error:
             await send(error)
             return
-        suffix = self._wager_suffix(user, bet)
         reels = spin_slots()
         # Pay out now, before any await: the reveal below is only for show, and a
         # failed edit or a restart mid-spin must not cost the player their winnings.
         result = self._slots_outcome(user, bet, reels)
+        suffix = self._wager_suffix(user, bet)
         shown = ["❓", "❓", "❓"]
         message = await send(f"🎰  {'   '.join(shown)}")
         for i in range(3):

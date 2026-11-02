@@ -15,12 +15,15 @@ from bot.games.connect4 import (
     initialize_board,
 )
 
+COLUMN_NUMBERS = "1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣"
 
-def _board_embed(board, current_player, piece):
-    description = "\n".join("".join(row) for row in board)
+
+def _board_embed(board, current_player, piece, over=False):
+    description = "\n".join(["".join(row) for row in board] + [COLUMN_NUMBERS])
     color = discord.Color.red() if piece == PLAYER1_PIECE else discord.Color.yellow()
     embed = discord.Embed(title="Connect 4", description=description, color=color)
-    embed.add_field(name="Current Turn", value=f"{current_player.mention} ({piece})")
+    if not over:
+        embed.add_field(name="Current Turn", value=f"{current_player.mention} ({piece})")
     return embed
 
 
@@ -48,8 +51,8 @@ class Connect4View(discord.ui.View):
     def _piece(self, player):
         return PLAYER1_PIECE if player == self.player1 else PLAYER2_PIECE
 
-    def embed(self):
-        return _board_embed(self.board, self.current, self._piece(self.current))
+    def embed(self, over=False):
+        return _board_embed(self.board, self.current, self._piece(self.current), over)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id in (self.player1.id, self.player2.id):
@@ -69,15 +72,17 @@ class Connect4View(discord.ui.View):
         drop_piece(self.board, col, piece)
 
         if check_win(self.board, piece):
+            self.stop()  # before the first await, so a second click can't win this twice
             line = (await self.on_win(self.current)).line()
             content = f"{self.current.mention} wins! 🎉" + (f"  ·  {line}" if line else "")
-            await interaction.response.edit_message(content=content, embed=self.embed(), view=None)
-            self.stop()
+            await interaction.response.edit_message(content=content, embed=self.embed(over=True), view=None)
             return
 
         if check_tie(self.board):
-            await interaction.response.edit_message(content="It's a tie! 😐", embed=self.embed(), view=None)
             self.stop()
+            line = (await self.on_win(None)).line()
+            content = "It's a tie! 😐" + (f"  ·  {line}" if line else "")
+            await interaction.response.edit_message(content=content, embed=self.embed(over=True), view=None)
             return
 
         if column_full(self.board, col):
@@ -93,6 +98,6 @@ class Connect4View(discord.ui.View):
             with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(
                     content=f"⌛ {self.current.mention} didn't move in time, so the game's over.",
-                    embed=self.embed(),
+                    embed=self.embed(over=True),
                     view=None,
                 )

@@ -10,7 +10,7 @@ _ARTICLES = {"a", "an", "the"}
 
 
 def normalize(text):
-    text = text.lower().strip()
+    text = re.sub(r"['’]", "", text.lower().strip())  # "doesn't" and "doesnt" are one word
     text = re.sub(r"[^a-z0-9 ]", " ", text)
     words = [w for w in text.split() if w]
     if words and words[0] in _ARTICLES:
@@ -23,7 +23,7 @@ def is_correct(guess, answer):
     a = normalize(answer)
     if not g or not a:
         return False
-    if g == a:
+    if g.replace(" ", "") == a.replace(" ", ""):  # "spiderman" and "book worm" count
         return True
     if " " in a:  # multi-word answer: accept if it appears within the guess
         return a in g

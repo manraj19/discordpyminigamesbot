@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.data import WORDS
+from bot.data import DICTIONARY, WORDS
 from bot.games.wordguess import GREEN, is_valid_guess, score_guess
 
 GAME = "wordguess"
@@ -24,9 +24,11 @@ class WordGuess(commands.Cog):
         return "\n".join(f"`{word.upper()}`  {''.join(tiles)}" for word, tiles in guesses)
 
     async def _is_word(self, word):
-        # Same dictionary API as ;define. A reachable 404 means "not a word";
-        # on any network error (status None) we allow the guess rather than punish it.
-        # ponytail: one API call per guess, reuses http_client, no new dep.
+        if word in DICTIONARY:
+            return True
+        # Newer words the local list lacks (email, emoji) go to the same API as ;define.
+        # A reachable 404 means "not a word"; on any network error (status None) we
+        # allow the guess rather than punish it.
         status, _ = await self.bot.http_client.fetch_json(f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}")
         return status != 404
 
@@ -61,8 +63,7 @@ class WordGuess(commands.Cog):
 
             guess = message.content.strip().lower()
             if not is_valid_guess(guess):
-                await channel.send("❌ That needs to be a **5-letter word**, letters only.")
-                continue
+                continue  # just chat, not a guess
             if guess != answer and not await self._is_word(guess):
                 await channel.send(f"❌ `{guess.upper()}` isn't a word. Try again (it won't cost a guess).")
                 continue

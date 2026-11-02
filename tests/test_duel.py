@@ -5,6 +5,7 @@ import pytest
 from bot.games.duel import (
     DRAW,
     MAX_TURNS,
+    PASSIVES,
     aggregate_stats,
     ai_choose,
     available_moves,
@@ -96,7 +97,9 @@ def test_ai_picks_a_legal_move():
 
 def test_aggregate_stats_adds_gear_and_levels():
     base = aggregate_stats(1)
-    assert base == {"max_hp": 100, "max_energy": 6, "attack": 0, "defense": 0, "regen": 0, "keep_momentum": False}
+    passives = {key: 0 for key in PASSIVES}
+    flags = {"keep_momentum": False, "last_stand": False}
+    assert base == {"max_hp": 100, "max_energy": 6, "attack": 0, "defense": 0, **passives, **flags}
     geared = aggregate_stats(3, weapon="steel_sword", armor="chainmail", accessory="power_band")
     assert geared["attack"] == 7
     assert geared["defense"] == 4

@@ -1,4 +1,4 @@
-"""Logging setup. Replaces the scattered print() calls in the old monolith."""
+"""Logging setup."""
 
 import logging
 

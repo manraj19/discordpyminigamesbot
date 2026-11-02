@@ -17,7 +17,7 @@ from bot.games.achievements import evaluate as evaluate_achievements
 from bot.services.blocklist import BlocklistService
 from bot.services.channel_lock import ChannelLockService
 from bot.services.duel import DuelService
-from bot.services.economy import GAME_WIN_XP, LEVEL_UP_COINS_PER, EconomyService, payout
+from bot.services.economy import GAME_WIN_XP, LEVEL_UP_BONUS_CAP, LEVEL_UP_COINS_PER, EconomyService, payout
 from bot.services.quests import QuestService
 from bot.services.scores import ScoreService
 from bot.services.usage import UsageService
@@ -111,9 +111,39 @@ class MiniGamesBot(commands.AutoShardedBot):
             held.append(player)
         try:
             await game()
+            await self.announce_played(channel, players)
         finally:
             for player in players:
                 self.end_session(player.id)
+
+    def count_played(self, user):
+        """Count a finished game toward the "play N games" quests, won or lost.
+        Returns the reward line for any quest that just completed ('' if none)."""
+        quests, level_up, bonus = self.quest_event(user.id, str(user), "game_play", 1)
+        return RewardResult(coins=bonus, level_up=level_up, quests=quests).line()
+
+    def wager_line(self, user, bet):
+        """Count a settled wager toward quests and check achievements, since a win can
+        cross a coin milestone. Returns the reward line ('' if nothing was earned)."""
+        quests, level_up, bonus = self.quest_event(user.id, str(user), "wager", bet)
+        new = self.award_achievements(user.id, str(user))
+        return RewardResult(coins=bonus, level_up=level_up, quests=quests, new_achievements=new).line()
+
+    async def announce_played(self, channel, players):
+        for player in players:
+            line = self.count_played(player)
+            if line:
+                await channel.send(f"{player.display_name}: {line}")
+
+    async def finish_match(self, game, players, winner):
+        """The end of a two-player button game: pay the winner (None for a tie) and
+        count the game for both. Returns the RewardResult the view shows."""
+        result = self.reward(winner, 1, game) if winner else RewardResult()
+        for player in players:
+            line = self.count_played(player)
+            if line:
+                result.notes.append(f"{player.display_name}: {line}")
+        return result
 
     async def setup_hook(self):
         # No game survives a restart, so any wager still open belongs to one that died
@@ -139,7 +169,7 @@ class MiniGamesBot(commands.AutoShardedBot):
         game_coins = payout(game, score)
         first_win = self.economy.claim_first_win(user.id, str(user)) if score > 0 else 0
         if game_coins:
-            self.economy.add_coins(user.id, str(user), game_coins)
+            self.economy.add_coins(user.id, str(user), game_coins, "game")
         xp = GAME_WIN_XP if score > 0 else 0
         level_up, level_bonus = (None, 0)
         if xp:
@@ -156,9 +186,10 @@ class MiniGamesBot(commands.AutoShardedBot):
         )
 
     def _reward_quests(self, user, score, game_coins):
-        """Fire the play/win/earn quest events for a game result and merge them.
-        Returns ``(completed, level_up, bonus_coins)`` for the reward line."""
-        events = [("game_play", 1)]
+        """Fire the win/earn quest events for a game result and merge them. Returns
+        ``(completed, level_up, bonus_coins)`` for the reward line. Plays are counted
+        when the game ends, by ``play`` and ``finish_match``."""
+        events = []
         if score > 0:
             events.append(("game_win", 1))
         if game_coins:
@@ -182,7 +213,7 @@ class MiniGamesBot(commands.AutoShardedBot):
         total_coins = sum(coins for _text, coins, _xp in completed)
         total_xp = sum(xp for _text, _coins, xp in completed)
         if total_coins:
-            self.economy.add_coins(user_id, username, total_coins)
+            self.economy.add_coins(user_id, username, total_coins, "quest")
         level_up, bonus = (None, 0)
         if total_xp:
             level_up, bonus = self.apply_level_up(user_id, username, self.duel.add_xp(user_id, username, total_xp))
@@ -194,8 +225,8 @@ class MiniGamesBot(commands.AutoShardedBot):
         new_level, leveled = level_result
         if not leveled:
             return None, 0
-        bonus = new_level * LEVEL_UP_COINS_PER
-        self.economy.add_coins(user_id, username, bonus)
+        bonus = min(new_level * LEVEL_UP_COINS_PER, LEVEL_UP_BONUS_CAP)
+        self.economy.add_coins(user_id, username, bonus, "level")
         return new_level, bonus
 
     def award_achievements(self, user_id, username):
@@ -213,13 +244,14 @@ class MiniGamesBot(commands.AutoShardedBot):
             "arena_floor": duelist["arena_floor"] if duelist else 0,
             "max_gear_level": self.duel.max_gear_level(user_id),
         }
+        earned = set(self.economy.earned_achievements(user_id))
         newly = []
         for aid in evaluate_achievements(stats):
-            if not self.economy.has_achievement(user_id, aid):
+            if aid not in earned:
                 self.economy.grant_achievement(user_id, aid)
                 name, _desc, reward, _cond = ACHIEVEMENTS[aid]
                 if reward:
-                    self.economy.add_coins(user_id, username, reward)
+                    self.economy.add_coins(user_id, username, reward, "achievement")
                 newly.append((name, reward))
         return newly
 
@@ -228,6 +260,9 @@ class MiniGamesBot(commands.AutoShardedBot):
         log.info("Logged in as %s (%d guilds)", self.user, len(self.guilds))
 
     async def close(self):
+        # Shut Discord down first: the command that asked for a restart still logs its
+        # completion on the way out, and that must not hit a closed database.
+        await super().close()
         await self.http_client.close()
         self.scores.close()
         self.economy.close()
@@ -236,4 +271,3 @@ class MiniGamesBot(commands.AutoShardedBot):
         self.channel_lock.close()
         self.usage.close()
         self.quests.close()
-        await super().close()

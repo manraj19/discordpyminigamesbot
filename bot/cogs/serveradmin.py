@@ -6,7 +6,7 @@
 ``;enable``. Both rules are enforced in bot.core.checks, before any command runs.
 
 These are hybrid commands, so one handler serves both ``;setchannel`` and
-``/setchannel``. The owner can run them anywhere, and ``;disable``/``;enable``
+``/setchannel``. The owner can run them in any server, and ``;disable``/``;enable``
 also take a channel ID from a DM.
 """
 

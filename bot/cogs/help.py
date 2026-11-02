@@ -79,12 +79,13 @@ COMMANDS = {
         "desc": "Challenge someone to a casual combat duel (optionally wager MiniCoins).",
         "usage": f"{PREFIX}duel <opponent> [bet]",
         "instructions": "Deterministic, turn-based combat: manage energy, use your kit, drop the foe to 0 HP. "
-        "Add a bet to wager MiniCoins (both ante, winner takes the pot).",
+        "Add a bet to wager MiniCoins: both ante and the winner takes the pot, less a 5% house cut.",
     },
     "ranked": {
         "desc": "Challenge someone to a ranked duel (ELO, no MiniCoins).",
         "usage": f"{PREFIX}ranked <opponent>",
-        "instructions": "Moves your ELO rating and awards trophies. Blocked if your ratings are too far apart.",
+        "instructions": "Moves your ELO rating and awards trophies. Everyone fights with level 20 HP, so your "
+        "level doesn't decide it. Blocked if your ratings are too far apart.",
     },
     "arena": {
         "desc": "Climb the arena tower: each win unlocks the next, harder floor.",
@@ -121,7 +122,8 @@ COMMANDS = {
     "flagle": {
         "desc": "Play a flag quiz.",
         "usage": f"{PREFIX}flagle",
-        "instructions": "Guess the country based on its flag.",
+        "instructions": "Name as many flags as you can, 10 seconds each. Typos and short names like USA or UK are "
+        "fine. Naming the wrong country ends the run.",
     },
     "mathematics": {
         "desc": "Solve mathematical problems.",
@@ -137,7 +139,7 @@ COMMANDS = {
     "coinflip": {
         "desc": "Bet MiniCoins on a coin flip.",
         "usage": f"{PREFIX}coinflip <bet> <heads|tails>",
-        "instructions": "Guess the side. A correct call pays double your bet.",
+        "instructions": "Guess the side. A correct call returns your bet plus 95% of it, so a 100 bet comes back as 195.",
     },
     "slots": {
         "desc": "Bet MiniCoins on the slot machine.",
@@ -145,12 +147,17 @@ COMMANDS = {
         "instructions": "Three of a kind pays big, two of a kind returns your bet, anything else loses it.",
     },
     "8ball": {"desc": "Ask the magic 8-ball a question.", "usage": f"{PREFIX}8ball <question>"},
-    "truthordare": {"desc": "Play a game of Truth or Dare.", "usage": f"{PREFIX}truthordare"},
+    "truthordare": {
+        "desc": "Play a game of Truth or Dare.",
+        "usage": f"{PREFIX}truthordare",
+        "instructions": "Anyone in the channel can pick the next one: Truth, Dare, or Surprise me.",
+    },
     "riddle": {"desc": "Solve a riddle.", "usage": f"{PREFIX}riddle", "instructions": "Solve the riddle to win!"},
     "race": {
         "desc": "Race against another user.",
         "usage": f"{PREFIX}race <opponent>",
-        "instructions": "Type the words in `backticks` as fast as you can!",
+        "instructions": "They have to say yes first. Then type the words in `backticks` as fast as you can. "
+        "First to 4 rounds wins.",
     },
     "wordguess": {
         "desc": "Guess the hidden 5-letter word in 6 tries.",
@@ -170,7 +177,7 @@ COMMANDS = {
     "guessnumber": {
         "desc": "Guess the number between 1 and 1000.",
         "usage": f"{PREFIX}guessnumber",
-        "instructions": "I'll say higher or lower after each guess until you find it.",
+        "instructions": "You get 10 guesses, and I'll say higher or lower after each one.",
     },
     "bombparty": {
         "desc": "Pass a lit bomb around and type words for 2 to 6 players.",
@@ -211,9 +218,9 @@ COMMANDS = {
         "instructions": "Buy a title with `;buy <id>`. Your equipped title shows on your profile.",
     },
     "buy": {
-        "desc": "Buy a cosmetic title from the shop.",
+        "desc": "Buy a cosmetic title from the shop, or put on one you already have.",
         "usage": f"{PREFIX}buy <id>",
-        "instructions": "See available titles and their ids with `;shop`.",
+        "instructions": "See available titles and their ids with `;shop`. `;buy none` takes your title off.",
     },
     "richest": {
         "desc": "See the players with the most MiniCoins.",
@@ -237,7 +244,7 @@ COMMANDS = {
         "desc": "View the leaderboard for a game.",
         "usage": f"{PREFIX}leaderboard <game> [server]",
         "instructions": "Shows the global board by default. Add `server` (e.g. `;lb dino server`) "
-        "for this server's board only.",
+        "for this server's board only. Short names like `c4` or `ttt` work too.",
     },
     "define": {"desc": "Define a word.", "usage": f"{PREFIX}define <word>"},
     "urbandictionary": {

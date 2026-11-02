@@ -30,24 +30,27 @@ class TicTacToeButton(discord.ui.Button):
         self.label = symbol
         self.style = discord.ButtonStyle.primary if symbol == "X" else discord.ButtonStyle.danger
         self.disabled = True
-        await interaction.response.edit_message(view=view)
 
+        # Everything up to the first await happens in one go, so a second click can't
+        # take another tile on the same turn or win the game twice.
         if view.game.winner() is not None:
             view.disable_all()
+            view.stop()
             line = (await view.on_win(interaction.user)).line()
             text = f"{interaction.user.mention} wins! 🎉" + (f"  ·  {line}" if line else "")
-            await view.message.edit(content=text, view=view)
-            view.stop()
+            await interaction.response.edit_message(content=text, view=view)
             return
 
         if view.game.is_draw():
             view.disable_all()
-            await view.message.edit(content="It's a draw! 😐", view=view)
             view.stop()
+            line = (await view.on_win(None)).line()
+            text = "It's a draw! 😐" + (f"  ·  {line}" if line else "")
+            await interaction.response.edit_message(content=text, view=view)
             return
 
         view.switch_player()
-        await view.message.edit(content=f"It's {view.current_player.mention}'s turn!", view=view)
+        await interaction.response.edit_message(content=f"It's {view.current_player.mention}'s turn!", view=view)
 
 
 class TicTacToeView(discord.ui.View):
@@ -58,7 +61,7 @@ class TicTacToeView(discord.ui.View):
         self.current_player = player1
         self.game = TicTacToeGame()
         self.message = None
-        self.on_win = on_win  # async callable(member) -> RewardResult
+        self.on_win = on_win  # async callable(winner, or None for a draw) -> RewardResult
         for row in range(3):
             for col in range(3):
                 self.add_item(TicTacToeButton(row, col))

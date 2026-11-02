@@ -10,6 +10,12 @@ import random
 SLOT_SYMBOLS = ["cherry", "lemon", "bell", "diamond", "seven"]
 # Three of a kind pays this multiple of the bet, per symbol (rarer = bigger).
 TRIPLE_MULT = {"cherry": 3, "lemon": 5, "bell": 8, "diamond": 12, "seven": 24}
+COINFLIP_WIN_PERCENT = 95  # a winning flip returns the bet plus this percent of it, a 2.5% house edge
+
+
+def coinflip_winnings(bet):
+    """Profit on a winning flip. A 1-coin bet still wins 1 rather than just coming back."""
+    return max(1, bet * COINFLIP_WIN_PERCENT // 100)
 
 
 def spin_slots():

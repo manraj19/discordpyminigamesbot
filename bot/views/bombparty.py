@@ -5,6 +5,7 @@ import contextlib
 
 import discord
 
+from bot.core.checks import is_blocked
 from bot.games.bombparty import MAX_PLAYERS, MIN_PLAYERS, STARTING_LIVES
 
 LOBBY_SECONDS = 30
@@ -21,15 +22,21 @@ class LobbyView(discord.ui.View):
         self.bot = bot
         self.message = None
 
-    def embed(self):
-        roster = "\n".join(f"{i}. {member.display_name}" for i, member in enumerate(self.joined, 1))
+    def embed(self, closed=False):
+        roster = "\n".join(
+            f"{i}. {discord.utils.escape_markdown(member.display_name)}" for i, member in enumerate(self.joined, 1)
+        )
+        call = (
+            "The lobby is closed."
+            if closed
+            else f"Hit **Join** to play. {MAX_PLAYERS} players max, starting in {LOBBY_SECONDS} seconds."
+        )
         embed = discord.Embed(
             title="💣 Bomb Party",
             description=(
                 f"Type a word containing the letters shown before the bomb goes off. Everyone starts with "
                 f"**{STARTING_LIVES}** lives and the last one standing wins. Your guesses stay up until your "
-                f"next turn, so everyone can see what's been tried.\n\n"
-                f"Hit **Join** to play. {MAX_PLAYERS} players max, starting in {LOBBY_SECONDS} seconds."
+                f"next turn, so everyone can see what's been tried.\n\n{call}"
             ),
             color=discord.Color.orange(),
         )
@@ -38,7 +45,13 @@ class LobbyView(discord.ui.View):
 
     async def _close(self, interaction):
         self.stop()
-        await interaction.response.edit_message(embed=self.embed(), view=None)
+        await interaction.response.edit_message(embed=self.embed(closed=True), view=None)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not is_blocked(self.bot, interaction.user.id):
+            return True
+        await interaction.response.send_message("You can't use that one.", ephemeral=True)
+        return False
 
     @discord.ui.button(label="Join", style=discord.ButtonStyle.success)
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -70,4 +83,4 @@ class LobbyView(discord.ui.View):
     async def on_timeout(self):
         if self.message:
             with contextlib.suppress(discord.HTTPException):
-                await self.message.edit(embed=self.embed(), view=None)
+                await self.message.edit(embed=self.embed(closed=True), view=None)

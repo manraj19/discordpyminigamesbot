@@ -7,7 +7,8 @@ tables. The streak/reward and per-game payout maths live in pure helpers
 """
 
 import datetime
-import sqlite3
+
+from bot.services.db import connect
 
 BASE_DAILY = 100  # coins for a fresh claim
 STREAK_BONUS = 25  # extra coins per consecutive day
@@ -15,9 +16,15 @@ STREAK_CAP_DAYS = 6  # bonus stops growing after a week (day 8+ = BASE + 6*BONUS
 VOTE_REWARD = 250  # coins for a Top.gg vote
 VOTE_COOLDOWN_HOURS = 12  # Top.gg votes refresh every 12 hours
 GAME_WIN_XP = 5  # account XP for a game win (score-based games grant it once on a positive score)
-LEVEL_UP_COINS_PER = 25  # level-up bonus = new level * this
+LEVEL_UP_COINS_PER = 25  # level-up bonus = new level * this, up to the cap
+LEVEL_UP_BONUS_CAP = 250  # reached at level 10. Uncapped, the bonus grows with the square of playtime
 FIRST_WIN_BONUS = 40  # bonus for a user's first game win each UTC day
 STREAKSHIELD_PRICE = 750  # a one-shot item that saves a streak from a single missed day
+FLOW_KEEP_DAYS = 60  # how long the per-player coin ledger is kept
+
+# Ledger sources that pay coins for playing, rather than moving them through the
+# house or a shop. The ;economy report reads a player's earnings from these.
+EARNED_SOURCES = ("daily", "vote", "game", "first_win", "level", "quest", "achievement", "duel", "arena")
 
 # Streak milestones: streak day -> (bonus coins, granted title id or None). The
 # titles here are earned this way, never bought, so they live in GRANTED_TITLES.
@@ -87,10 +94,29 @@ def payout(game, score):
     return WIN_COINS if score > 0 else 0
 
 
+def percentile(ascending, percent):
+    """Nearest-rank percentile of an ascending list (0 if it's empty)."""
+    return ascending[(len(ascending) * percent - 1) // 100] if ascending else 0
+
+
+def top_share(ascending):
+    """Fraction of all coins held by the richest 1% of an ascending list of balances,
+    which is always at least one wallet. 0 when nobody holds anything."""
+    total = sum(ascending)
+    if total <= 0:
+        return 0.0
+    top = (len(ascending) + 99) // 100
+    return sum(ascending[-top:]) / total
+
+
+def _flow_day(days_ago=0):
+    """A UTC day as the ledger writes it."""
+    return (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=days_ago)).isoformat()
+
+
 class EconomyService:
     def __init__(self, db_path="scores.db"):
-        self._conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")  # concurrent readers with one writer, safer on crash
+        self._conn = connect(db_path)
         self._conn.execute(
             """CREATE TABLE IF NOT EXISTS economy (
                 user_id INTEGER PRIMARY KEY,
@@ -126,6 +152,20 @@ class EconomyService:
                 game TEXT
             )"""
         )
+        # Every coin move, netted per day, player and source: payouts positive, burns
+        # negative. Per player because pricing needs what a typical player earns.
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS coin_flow (
+                day TEXT,
+                user_id INTEGER,
+                source TEXT,
+                coins INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (day, user_id, source)
+            )"""
+        )
+        # ponytail: pruned on startup only, which assumes the bot restarts within a few
+        # months. Move this to the maintenance loop if uptime ever gets that long.
+        self._conn.execute("DELETE FROM coin_flow WHERE day < ?", (_flow_day(FLOW_KEEP_DAYS),))
         # Upgrade older economy tables that predate later columns.
         cols = [r[1] for r in self._conn.execute("PRAGMA table_info(economy)")]
         if "title" not in cols:
@@ -141,39 +181,54 @@ class EconomyService:
         row = self._conn.execute("SELECT coins, streak FROM economy WHERE user_id = ?", (user_id,)).fetchone()
         return (row[0], row[1]) if row else (0, 0)
 
-    def _credit(self, user_id, username, amount):
+    def _tally(self, user_id, source, amount):
+        """Add a coin move to today's ledger, in the same transaction as the move."""
+        self._conn.execute(
+            "INSERT INTO coin_flow (day, user_id, source, coins) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(day, user_id, source) DO UPDATE SET coins = coin_flow.coins + excluded.coins",
+            (_flow_day(), user_id, source, amount),
+        )
+
+    def _credit(self, user_id, username, amount, source):
         self._conn.execute(
             "INSERT INTO economy (user_id, username, coins) VALUES (?, ?, ?) "
             "ON CONFLICT(user_id) DO UPDATE SET username = excluded.username, coins = economy.coins + excluded.coins",
             (user_id, username, amount),
         )
+        self._tally(user_id, source, amount)
 
-    def add_coins(self, user_id, username, amount):
-        """Add coins (the payout faucet). Creates the row if needed."""
-        self._credit(user_id, username, amount)
+    def add_coins(self, user_id, username, amount, source="other"):
+        """Add coins (the payout faucet). Creates the row if needed. Anything showing
+        as "other" in ;economy is a call site that forgot to name its source."""
+        self._credit(user_id, username, amount, source)
         self._conn.commit()
 
-    def _take(self, user_id, amount):
+    def _take(self, user_id, amount, source):
         """Deduct ``amount`` if the user can afford it, without committing. One
         guarded UPDATE, so nothing can slip between the balance check and the
         deduction, even if this ever becomes async."""
+        if amount >= 2**63:  # nobody holds this much, and SQLite can't even store the number
+            return False
         cur = self._conn.execute(
             "UPDATE economy SET coins = coins - ? WHERE user_id = ? AND coins >= ?", (amount, user_id, amount)
         )
-        return cur.rowcount == 1
+        if cur.rowcount != 1:
+            return False
+        self._tally(user_id, source, -amount)
+        return True
 
-    def spend(self, user_id, amount):
+    def spend(self, user_id, amount, source="other"):
         """Deduct ``amount`` if the user can afford it. Returns True on success."""
-        taken = self._take(user_id, amount)
+        taken = self._take(user_id, amount, source)
         self._conn.commit()  # even on a miss, so no write transaction is left open to block the others
         return taken
 
     # --- wagers that outlive a single command (duels, blackjack) ---
     def stake(self, user_id, username, amount, game):
         """Take a wager and record it as open until its game settles, so a restart
-        mid-game can't swallow it. Returns the stake id, or None if the user can't
-        afford it."""
-        if not self._take(user_id, amount):
+        mid-game can't swallow it. ``game`` is also its ledger source. Returns the
+        stake id, or None if the user can't afford it."""
+        if not self._take(user_id, amount, game):
             self._conn.commit()
             return None
         cur = self._conn.execute(
@@ -191,9 +246,9 @@ class EconomyService:
     def refund_open_stakes(self):
         """Hand back every stake whose game never settled. Only safe at startup,
         when no game can still be running. Returns how many were refunded."""
-        rows = self._conn.execute("SELECT user_id, username, amount FROM open_stakes").fetchall()
-        for user_id, username, amount in rows:
-            self._credit(user_id, username, amount)
+        rows = self._conn.execute("SELECT user_id, username, amount, game FROM open_stakes").fetchall()
+        for user_id, username, amount, game in rows:
+            self._credit(user_id, username, amount, game)
         self._conn.execute("DELETE FROM open_stakes")
         self._conn.commit()
         return len(rows)
@@ -203,6 +258,34 @@ class EconomyService:
         return self._conn.execute(
             "SELECT username, coins FROM economy ORDER BY coins DESC LIMIT ?", (limit,)
         ).fetchall()
+
+    # --- what the owner's ;economy report reads ---
+    def balances(self):
+        """Every wallet's coins, poorest first."""
+        return [r[0] for r in self._conn.execute("SELECT coins FROM economy ORDER BY coins")]
+
+    def flow_by_source(self, days=7):
+        """``[(source, net coins), ...]`` over the last ``days`` days, most paid first."""
+        return self._conn.execute(
+            "SELECT source, SUM(coins) AS net FROM coin_flow WHERE day >= ? GROUP BY source ORDER BY net DESC",
+            (_flow_day(days - 1),),
+        ).fetchall()
+
+    def player_days(self, sources, days=7):
+        """``[(user_id, coins), ...]``, one per day a player took coins from ``sources``,
+        lowest first."""
+        marks = ", ".join("?" * len(sources))
+        return self._conn.execute(
+            f"SELECT user_id, SUM(coins) AS earned FROM coin_flow WHERE day >= ? AND source IN ({marks}) "
+            "GROUP BY day, user_id ORDER BY earned",
+            (_flow_day(days - 1), *sources),
+        ).fetchall()
+
+    def active_players(self, days=7):
+        """How many players moved any coins in the last ``days`` days."""
+        return self._conn.execute(
+            "SELECT COUNT(DISTINCT user_id) FROM coin_flow WHERE day >= ?", (_flow_day(days - 1),)
+        ).fetchone()[0]
 
     def claim_daily(self, user_id, username, today=None):
         """Try to claim the daily reward. Returns ``(claimed, reward, streak, coins, extras)``;
@@ -242,6 +325,7 @@ class EconomyService:
             "streak = excluded.streak, last_daily = excluded.last_daily",
             (user_id, username, coins, new_streak, today.isoformat()),
         )
+        self._tally(user_id, "daily", reward + milestone_coins)
         milestone_title = None
         if milestone_id:  # grant and auto-equip the earned title so the reward shows at once
             self._conn.execute(
@@ -258,7 +342,7 @@ class EconomyService:
         """Buy a streak shield. Returns 'bought', 'have' (already holding one), or 'poor'."""
         if self.owns(user_id, "streakshield"):
             return "have"
-        if not self.spend(user_id, STREAKSHIELD_PRICE):
+        if not self.spend(user_id, STREAKSHIELD_PRICE, "shield"):
             return "poor"
         self._conn.execute("INSERT OR IGNORE INTO cosmetics (user_id, item_id) VALUES (?, 'streakshield')", (user_id,))
         self._conn.execute("UPDATE economy SET username = ? WHERE user_id = ?", (username, user_id))
@@ -276,7 +360,7 @@ class EconomyService:
         row = self._conn.execute("SELECT last_first_win FROM economy WHERE user_id = ?", (user_id,)).fetchone()
         if row and row[0] == today:
             return 0
-        self.add_coins(user_id, username, FIRST_WIN_BONUS)  # creates the row if needed
+        self.add_coins(user_id, username, FIRST_WIN_BONUS, "first_win")  # creates the row if needed
         self._conn.execute("UPDATE economy SET last_first_win = ? WHERE user_id = ?", (today, user_id))
         self._conn.commit()
         return FIRST_WIN_BONUS
@@ -316,18 +400,18 @@ class EconomyService:
 
     def buy_title(self, user_id, username, item_id):
         """Buy and equip a title. Returns 'bought', 'equipped' (already owned, just
-        re-equipped, no charge), 'poor', or 'unknown'."""
+        re-equipped, no charge), 'poor', 'unearned', or 'unknown'."""
         if item_id in GRANTED_TITLES:  # earned, not bought: only equip if already owned
             if self.owns(user_id, item_id):
                 self.equip_title(user_id, item_id)
                 return "equipped"
-            return "unknown"
+            return "unearned"
         if item_id not in TITLES:
             return "unknown"
         if self.owns(user_id, item_id):
             self.equip_title(user_id, item_id)
             return "equipped"
-        if not self.spend(user_id, TITLES[item_id][1]):
+        if not self.spend(user_id, TITLES[item_id][1], "title"):
             return "poor"
         self._conn.execute("INSERT OR IGNORE INTO cosmetics (user_id, item_id) VALUES (?, ?)", (user_id, item_id))
         self._conn.execute("UPDATE economy SET username = ? WHERE user_id = ?", (username, user_id))
@@ -367,7 +451,7 @@ class EconomyService:
             if elapsed < datetime.timedelta(hours=VOTE_COOLDOWN_HOURS):
                 hours_left = VOTE_COOLDOWN_HOURS - elapsed.total_seconds() / 3600
                 return False, 0, max(1, round(hours_left))
-        self.add_coins(user_id, username, VOTE_REWARD)
+        self.add_coins(user_id, username, VOTE_REWARD, "vote")
         self._conn.execute("UPDATE economy SET last_vote = ? WHERE user_id = ?", (now.isoformat(), user_id))
         self._conn.commit()
         return True, VOTE_REWARD, 0

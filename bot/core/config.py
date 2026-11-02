@@ -30,8 +30,6 @@ BOT_ID = 1285070559087951974
 
 # --- Branding / links (single source of truth for a uniform look) ---
 BRAND_COLOR = 0xF1C40F
-ERROR_COLOR = 0xE74C3C
-SUCCESS_COLOR = 0x2ECC71
 FOOTER_TEXT = "Developed by fzng (fang)."
 SUPPORT_SERVER = "https://discord.gg/3UpnJhjkKZ"
 TOPGG_VOTE = f"https://top.gg/bot/{BOT_ID}/vote"

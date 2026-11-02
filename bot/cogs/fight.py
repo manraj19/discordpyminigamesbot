@@ -1,5 +1,7 @@
 """Fight command."""
 
+from functools import partial
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -11,6 +13,10 @@ CHALLENGE_GIF = "https://tenor.com/view/cj-sekiro-gif-23480678"
 GAME = "fight"
 
 
+def _challenge_text(challenger, opponent):
+    return f"{opponent.mention}, {challenger.mention} has challenged you to a fight!\n{CHALLENGE_GIF}"
+
+
 def _instructions_embed():
     return discord.Embed(title="Instructions", description=INSTRUCTIONS, color=discord.Color.red())
 
@@ -19,21 +25,20 @@ class Fight(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def _record_win(self, member):
-        return self.bot.reward(member, 1, GAME)
+    def _view(self, challenger, opponent):
+        return FightView(challenger, opponent, on_win=partial(self.bot.finish_match, GAME, [challenger, opponent]))
 
     @commands.command()
     @commands.cooldown(1, 40, commands.BucketType.user)
     async def fight(self, ctx, opponent: discord.Member):
         reason = invalid_opponent(opponent, ctx.author, self_message="You can't fight yourself!")
         if reason:
+            ctx.command.reset_cooldown(ctx)
             await ctx.send(reason)
             return
 
-        await ctx.send(f"{opponent.mention}, {ctx.author.mention} has challenged you to a fight!")
-        await ctx.send(CHALLENGE_GIF)
-        await ctx.send(embed=_instructions_embed())
-        view = FightView(ctx.author, opponent, on_win=self._record_win)
+        await ctx.send(_challenge_text(ctx.author, opponent), embed=_instructions_embed())
+        view = self._view(ctx.author, opponent)
         view.message = await ctx.send(f"{view.turn.mention}, choose your first move:", view=view)
 
     @app_commands.command(name="fight", description="Challenge another user to a fight")
@@ -46,11 +51,9 @@ class Fight(commands.Cog):
             return
 
         await interaction.response.send_message(
-            f"{opponent.mention}, {interaction.user.mention} has challenged you to a fight!"
+            _challenge_text(interaction.user, opponent), embed=_instructions_embed()
         )
-        await interaction.followup.send(CHALLENGE_GIF)
-        await interaction.followup.send(embed=_instructions_embed())
-        view = FightView(interaction.user, opponent, on_win=self._record_win)
+        view = self._view(interaction.user, opponent)
         view.message = await interaction.followup.send(
             f"{view.turn.mention}, choose your first move:", view=view, wait=True
         )

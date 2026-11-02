@@ -12,8 +12,14 @@ import discord
 from discord.ext import commands
 
 from bot.core import config, embeds, emojis
+from bot.services.economy import EARNED_SOURCES, FLOW_KEEP_DAYS, percentile, top_share
 from bot.services.scores import SUPPORTED_GAMES
 from bot.views.confirm import ConfirmView
+
+# ;economy watches these: a game soft cap only gets built if players keep passing them.
+SOFT_CAP_LINES = (1500, 3000)
+# The level bonus stops growing at L10 and level HP at L20.
+LEVEL_BANDS = (("L1-9", 1, 9), ("L10-19", 10, 19), ("L20-49", 20, 49), ("L50-99", 50, 99), ("L100+", 100, 10**9))
 
 
 class Admin(commands.Cog):
@@ -34,7 +40,7 @@ class Admin(commands.Cog):
         embed.add_field(name="Servers", value=f"{len(self.bot.guilds):,}")
         embed.add_field(name="Shards", value=str(self.bot.shard_count or 1))
         embed.add_field(name="Members (sum)", value=f"{total_members:,}")
-        embed.add_field(name="Latency", value=f"{round(self.bot.latency * 1000)}ms")
+        embed.add_field(name="Latency", value=f"{self.bot.latency * 1000:.0f}ms")
         embed.add_field(name="Uptime", value=str(uptime).split(".")[0])
         embed.add_field(name="Blocked users", value=str(len(self.bot.blocklist.all())))
         embed.add_field(name="Unique players", value=f"{self.bot.scores.unique_users():,}")
@@ -44,9 +50,52 @@ class Admin(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command()
+    async def economy(self, ctx, days: int = 7):
+        """Where coins came from and went over the last N days (default 7), and who holds them."""
+        days = max(1, min(days, FLOW_KEEP_DAYS))
+        eco = self.bot.economy
+        flow = eco.flow_by_source(days)
+        paid = sum(net for source, net in flow if net > 0 and source != "admin")
+        burned = -sum(net for source, net in flow if net < 0 and source != "admin")
+        wallets = eco.balances()
+        earned = [coins for _user, coins in eco.player_days(EARNED_SOURCES, days)]
+        game_days = eco.player_days(("game",), days)
+        past_lines = " · ".join(
+            f"past {line:,}: {len({user for user, coins in game_days if coins >= line})}" for line in SOFT_CAP_LINES
+        )
+        levels = self.bot.duel.levels()
+        bands = " · ".join(f"{name}: {sum(low <= lv <= high for lv in levels):,}" for name, low, high in LEVEL_BANDS)
+
+        embed = embeds.branded(title=f"MiniCoin economy (last {days}d)")
+        by_source = "\n".join(f"`{source}` {net:+,}" for source, net in flow)
+        embed.add_field(name="Net by source", value=by_source or "Nothing recorded yet.", inline=False)
+        embed.add_field(
+            name="Flow (admin left out)",
+            value=f"Paid {paid:,} · burned {burned:,} · {burned * 100 // paid if paid else 0}% of what was paid",
+            inline=False,
+        )
+        embed.add_field(
+            name="Wallets",
+            value=f"{len(wallets):,} wallets · {sum(wallets):,} coins\n"
+            f"p50 {percentile(wallets, 50):,} · p90 {percentile(wallets, 90):,} · p99 {percentile(wallets, 99):,} · "
+            f"richest {max(wallets, default=0):,} · top 1% hold {top_share(wallets):.0%}",
+            inline=False,
+        )
+        embed.add_field(
+            name="Active players",
+            value=f"{eco.active_players(days):,} moved coins\n"
+            f"Earned on a day they played: p50 {percentile(earned, 50):,} · p90 {percentile(earned, 90):,} · "
+            f"most {max(earned, default=0):,}\n"
+            f"Game coins in one day, players {past_lines}",
+            inline=False,
+        )
+        embed.add_field(name="Levels", value=f"{bands} · top L{max(levels, default=1)}", inline=False)
+        await ctx.send(embed=embed)
+
+    @commands.command()
     async def givecoins(self, ctx, member: discord.Member, amount: int):
         """Grant (or remove, with a negative amount) coins. For testing the economy."""
-        self.bot.economy.add_coins(member.id, str(member), amount)
+        self.bot.economy.add_coins(member.id, str(member), amount, "admin")
         coins, _ = self.bot.economy.balance(member.id)
         await ctx.send(f"Gave {amount} MiniCoins to {member.mention}. Their balance is now {coins}.")
 

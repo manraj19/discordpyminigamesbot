@@ -7,7 +7,7 @@
   and a channel with games pinned to it only starts those games.
 
 Threads follow their parent channel's rules. The owner is exempt from the
-blocklist and switched-off channels, so you can never lock yourself out.
+blocklist and can always ``;enable``, so you can never lock yourself out.
 """
 
 import discord
@@ -35,7 +35,7 @@ class WrongChannel(commands.CheckFailure):
     message says where it can be played."""
 
 
-def _is_blocked(client, user_id):
+def is_blocked(client, user_id):
     if user_id == config.OWNER_ID:
         return False
     blocklist = getattr(client, "blocklist", None)
@@ -43,8 +43,9 @@ def _is_blocked(client, user_id):
 
 
 def _is_admin(user):
+    """Server admins, plus the bot owner in any server."""
     perms = getattr(user, "guild_permissions", None)
-    return bool(perms and perms.administrator)
+    return user.id == config.OWNER_ID or bool(perms and perms.administrator)
 
 
 def _root(channel):
@@ -56,7 +57,7 @@ def _turned_off(client, channel, user, command):
     """True if the bot is off in this channel for this command. Admins can still
     run ;enable there, or they could never switch it back on."""
     lock = getattr(client, "channel_lock", None)
-    if user.id == config.OWNER_ID or not (lock and channel) or not lock.is_disabled(_root(channel)):
+    if not (lock and channel) or not lock.is_disabled(_root(channel)):
         return False
     return not (command == "enable" and _is_admin(user))
 
@@ -70,7 +71,7 @@ def _off_note(user, prefix):
 def silenced(ctx):
     """Whether the bot should stay quiet for this message, even about a command
     it doesn't recognise."""
-    return _is_blocked(ctx.bot, ctx.author.id) or _turned_off(ctx.bot, ctx.channel, ctx.author, "")
+    return is_blocked(ctx.bot, ctx.author.id) or _turned_off(ctx.bot, ctx.channel, ctx.author, "")
 
 
 def join_and(items):
@@ -119,7 +120,7 @@ def _game_block(client, guild_id, channel, game):
 class BlocklistCommandTree(app_commands.CommandTree):
     async def interaction_check(self, interaction):
         client, user, channel = interaction.client, interaction.user, interaction.channel
-        if _is_blocked(client, user.id):
+        if is_blocked(client, user.id):
             return False
         command = interaction.command.qualified_name if interaction.command else ""
         if _turned_off(client, channel, user, command):
@@ -135,7 +136,7 @@ class BlocklistCommandTree(app_commands.CommandTree):
 async def global_blocklist_check(ctx):
     """Global check for prefix commands: blocked users, switched-off channels and
     games pinned to other channels."""
-    if _is_blocked(ctx.bot, ctx.author.id):
+    if is_blocked(ctx.bot, ctx.author.id):
         raise BlockedUser()
     command = ctx.command.qualified_name
     if _turned_off(ctx.bot, ctx.channel, ctx.author, command):

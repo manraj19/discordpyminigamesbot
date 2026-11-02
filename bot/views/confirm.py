@@ -4,6 +4,8 @@ import contextlib
 
 import discord
 
+from bot.core.checks import is_blocked
+
 
 class ConfirmView(discord.ui.View):
     def __init__(self, owner_id, on_confirm):
@@ -13,7 +15,7 @@ class ConfirmView(discord.ui.View):
         self.message = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id == self.owner_id:
+        if interaction.user.id == self.owner_id and not is_blocked(interaction.client, self.owner_id):
             return True
         await interaction.response.send_message("This isn't your prompt.", ephemeral=True)
         return False

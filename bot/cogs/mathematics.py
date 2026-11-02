@@ -2,6 +2,7 @@
 
 import asyncio
 import random
+import re
 from typing import Literal
 
 import discord
@@ -12,6 +13,7 @@ from bot.core.utils import run_countdown
 
 GAME = "mathematics"
 QUIZ_TYPES = ["addition", "subtraction", "multiplication", "division"]
+NUMBER = re.compile(r"-?\d+(\.\d+)?")
 
 
 def _new_problem(quiz_type, difficulty):
@@ -26,7 +28,7 @@ def _new_problem(quiz_type, difficulty):
         return f"{a} * {b}", a * b
     b = random.randint(1, 5 * difficulty)
     a = b * random.randint(1, 5 * difficulty)
-    return f"{a} / {b}", round(a / b, 2)
+    return f"{a} / {b}", a // b
 
 
 class Mathematics(commands.Cog):
@@ -49,9 +51,10 @@ class Mathematics(commands.Cog):
             ticker = asyncio.create_task(run_countdown(msg, secs, prefix))
 
             try:
+                # Only numbers count, so chatting mid-run doesn't end it.
                 guess = await self.bot.wait_for(
                     "message",
-                    check=lambda m: m.author == player and m.channel == channel,
+                    check=lambda m: m.author == player and m.channel == channel and NUMBER.fullmatch(m.content.strip()),
                     timeout=response_time,
                 )
             except asyncio.TimeoutError:
@@ -60,16 +63,7 @@ class Mathematics(commands.Cog):
             finally:
                 ticker.cancel()
 
-            try:
-                if quiz_type == "division":
-                    correct = abs(float(guess.content) - answer) < 0.01
-                else:
-                    correct = int(guess.content) == answer
-            except ValueError:
-                await channel.send(f"That wasn't a number. The answer was {answer}. Your score is {score}")
-                break
-
-            if not correct:
+            if float(guess.content) != answer:
                 await channel.send(f"Wrong! The correct answer was {answer}. Your score is {score}")
                 break
             score += 1

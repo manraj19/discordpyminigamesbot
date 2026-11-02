@@ -6,7 +6,6 @@ has already paid for, and tracks combat progression.
 """
 
 import datetime
-import sqlite3
 
 from bot.games.duel import (
     ABILITIES,
@@ -17,6 +16,7 @@ from bot.games.duel import (
     STARTER_ABILITIES,
     level_for_xp,
 )
+from bot.services.db import connect
 
 # Explicit column order for duelist reads, so rows stay stable no matter what
 # order the ALTER TABLE upgrades ran in.
@@ -28,8 +28,7 @@ _COLUMNS = (
 
 class DuelService:
     def __init__(self, db_path="scores.db"):
-        self._conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")  # concurrent readers with one writer, safer on crash
+        self._conn = connect(db_path)
         self._conn.execute(
             """CREATE TABLE IF NOT EXISTS duelists (
                 user_id INTEGER PRIMARY KEY,
@@ -118,6 +117,10 @@ class DuelService:
         self._conn.commit()
         new_level = level_for_xp(rec["xp"] + amount)
         return new_level, new_level > rec["level"]
+
+    def levels(self):
+        """Every duelist's level, for the owner's ;economy report."""
+        return [level_for_xp(r[0]) for r in self._conn.execute("SELECT xp FROM duelists")]
 
     # --- gear ---
     def owns_gear(self, user_id, item_id):
@@ -244,15 +247,22 @@ class DuelService:
         return new_level, new_level > rec["level"]
 
     def top(self, limit=10):
+        """The ranked board. Anyone who has never played ranked sits at the starting
+        rating and would crowd out real players below 1000. The rating check keeps
+        rows from before ranked_games existed."""
         return self._conn.execute(
-            "SELECT username, rating, wins, losses, ranked_streak FROM duelists ORDER BY rating DESC LIMIT ?",
-            (limit,),
+            "SELECT username, rating, wins, losses, ranked_streak FROM duelists "
+            "WHERE ranked_games > 0 OR rating != ? ORDER BY rating DESC LIMIT ?",
+            (START_RATING, limit),
         ).fetchall()
 
     def reset_season(self):
         """Reset every duelist's rating and trophies to default. Returns the
         pre-reset top duelist as ``(username, rating)`` (the season champion), or None."""
-        champ = self._conn.execute("SELECT username, rating FROM duelists ORDER BY rating DESC LIMIT 1").fetchone()
+        champ = self._conn.execute(
+            "SELECT username, rating FROM duelists WHERE ranked_games > 0 OR rating != ? ORDER BY rating DESC LIMIT 1",
+            (START_RATING,),
+        ).fetchone()
         self._conn.execute("UPDATE duelists SET rating = ?, trophies = 0", (START_RATING,))
         self._conn.commit()
         return champ
