@@ -5,6 +5,9 @@ on:
     types: [completed]
     branches: [main]
 
+# Deploys over SSH with repo secrets; it never needs the GitHub token.
+permissions: {}
+
 jobs:
   deploy:
     # CI also runs on pull requests, and a green PR run must not deploy.
