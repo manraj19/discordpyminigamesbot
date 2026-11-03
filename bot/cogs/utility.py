@@ -14,7 +14,7 @@ from bot.core.rewards import RewardResult, progress_bar
 from bot.games.achievements import ACHIEVEMENTS
 from bot.games.duel import XP_PER_LEVEL
 from bot.services.economy import title_name
-from bot.services.scores import SUPPORTED_GAMES, game_title
+from bot.services.scores import SUPPORTED_GAMES, game_title, score_text
 from bot.views.pages import PagedView
 
 MAX_DEFINITIONS = 8  # on a page of ;define, so a word with dozens of senses stays readable
@@ -114,7 +114,8 @@ class Utility(commands.Cog):
             where = " on this server" if guild_id else ""
             return f"No scores yet for {game_title(game)}{where}.", None
         description = "\n".join(
-            f"{i}. {discord.utils.escape_markdown(username)}: {score}" for i, (username, score) in enumerate(rows, 1)
+            f"{i}. {discord.utils.escape_markdown(username)}: {score_text(game, score)}"
+            for i, (username, score) in enumerate(rows, 1)
         )
         embed = embeds.branded(title=f"{game_title(game)} Leaderboard", description=description)
         embed.set_footer(text="This server" if guild_id else "Global, all servers")
@@ -161,7 +162,7 @@ class Utility(commands.Cog):
         embed.add_field(name="🏅 Achievements", value=f"{earned}/{len(ACHIEVEMENTS)}", inline=True)
         scores = ((game, self.bot.scores.user_score(user.id, game)) for game in SUPPORTED_GAMES)
         played = [
-            f"**{game_title(game)}**: {score:,} · rank #{self.bot.scores.rank(game, score):,}"
+            f"**{game_title(game)}**: {score_text(game, score)} · rank #{self.bot.scores.rank(game, score):,}"
             for game, score in scores
             if score is not None
         ]

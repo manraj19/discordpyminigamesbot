@@ -214,6 +214,15 @@ def test_urban_gets_a_page_per_definition():
         _fits_discord(embed)
 
 
+def test_win_counting_games_say_wins_and_best_scores_stay_bare():
+    from bot.services.scores import score_text
+
+    assert score_text("bombparty", 77) == "77 wins"
+    assert score_text("connect4", 1) == "1 win"
+    assert score_text("tictactoe", 1500) == "1,500 wins"
+    assert score_text("flagle", 1200) == "1,200"
+
+
 def test_the_profile_only_lists_games_you_played():
     scores = SimpleNamespace(
         user_score=lambda _, game: 1200 if game == "flagle" else None,

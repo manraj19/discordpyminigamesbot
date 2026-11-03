@@ -43,6 +43,14 @@ def game_title(game):
     return _TITLES.get(game, game.capitalize())
 
 
+def score_text(game, score):
+    """'77 wins' for games that count wins (every cumulative game scores 1 per win),
+    a bare '1,200' for best-score games."""
+    if game in NON_CUMULATIVE_GAMES:
+        return f"{score:,}"
+    return f"{score:,} win" + ("" if score == 1 else "s")
+
+
 _SCHEMA = """CREATE TABLE {name} (
     user_id INTEGER,
     username TEXT,
