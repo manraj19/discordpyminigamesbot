@@ -142,6 +142,8 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs lint, the forma
 check, the tests and a smoke import on every push and pull request. A push to
 `main` that passes CI deploys automatically.
 
+Want to add a game or fix something? See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Deployment
 
 The bot launches with `python -m bot` from the repository root. Set the
@@ -155,3 +157,7 @@ python -m bot
 
 After deploying command changes, run `;sync` once in Discord (owner only) to
 refresh the slash commands.
+
+## License
+
+[MIT](LICENSE)

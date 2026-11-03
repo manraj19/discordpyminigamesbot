@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# Pull requests from forks run this, so the token stays read-only.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
