@@ -25,6 +25,9 @@ FLAG_LOAD_SECONDS = 1
 # Ticking every second spends Discord's whole edit budget, which left the flag's own
 # edit queueing behind the clock.
 TICK_SECONDS = 2
+# Guesses get deleted as they're read so the flag never scrolls away. A ❓ guess
+# stays this long so the player sees why it didn't count.
+UNKNOWN_LINGER_SECONDS = 3
 
 
 def _flag_embed(code, title, status):
@@ -32,6 +35,11 @@ def _flag_embed(code, title, status):
     embed.set_image(url=f"https://flagcdn.com/w160/{code.lower()}.png")
     embed.set_footer(text="Typos are fine. Naming the wrong country ends the run.")
     return embed
+
+
+async def _question(guess):
+    with contextlib.suppress(discord.HTTPException):
+        await guess.add_reaction("❓")
 
 
 class Flagle(commands.Cog):
@@ -50,9 +58,10 @@ class Flagle(commands.Cog):
         await asyncio.sleep(FLAG_LOAD_SECONDS)
         await run_countdown(message, ROUND_SECONDS, step=TICK_SECONDS)
 
-    async def _await_verdict(self, channel, author, clock, code, previous):
+    async def _await_verdict(self, channel, author, clock, code, previous, tidy=False):
         """Read the player's messages until one decides this flag. Returns 'right',
-        'wrong', or 'time' if the clock gets there first."""
+        'wrong', or 'time' if the clock gets there first. With ``tidy`` every guess
+        but the losing one gets deleted, in the background so it never holds up play."""
 
         def mine(message):
             return message.author == author and message.channel == channel
@@ -65,15 +74,20 @@ class Flagle(commands.Cog):
                 return "time"
             guess = waiter.result()
             verdict = judge(guess.content, code, previous)
+            if verdict == "unknown":  # not awaited: an answer typed meanwhile would be missed
+                asyncio.create_task(_question(guess))
+            if tidy and verdict != "wrong":  # the losing guess stays, next to the answer
+                # delay= makes discord.py delete in a background task and swallow errors
+                await guess.delete(delay=UNKNOWN_LINGER_SECONDS if verdict == "unknown" else 0)
             if verdict in ("right", "wrong"):
                 return verdict
-            if verdict == "unknown":
-                with contextlib.suppress(discord.HTTPException):
-                    await guess.add_reaction("❓")
 
     async def _run(self, channel, author):
         score = 0
         message = previous = verdict = None
+        # No guild means a DM, where the bot can't delete the player's messages.
+        guild = getattr(channel, "guild", None)
+        tidy = guild is not None and channel.permissions_for(guild.me).manage_messages
 
         for code in random.sample(list(COUNTRIES), len(COUNTRIES)):
             title = f"Flagle · Score {score}"
@@ -85,7 +99,7 @@ class Flagle(commands.Cog):
                 embed = _flag_embed(code, title, f"✅ That was **{COUNTRIES[previous]}**. Next flag:")
                 clock = asyncio.create_task(self._clock(message, embed))
             try:
-                verdict = await self._await_verdict(channel, author, clock, code, previous)
+                verdict = await self._await_verdict(channel, author, clock, code, previous, tidy)
             finally:
                 clock.cancel()
             if verdict != "right":

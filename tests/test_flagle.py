@@ -111,9 +111,13 @@ class _Message:
     def __init__(self, player, content=""):
         self.author, self.channel, self.content = player, "chan", content
         self.reactions = []
+        self.deleted = None  # the delay it was deleted with
 
     async def add_reaction(self, emoji):
         self.reactions.append(emoji)
+
+    async def delete(self, delay=None):
+        self.deleted = delay
 
 
 class _Board:
@@ -257,6 +261,62 @@ def test_chat_gets_a_question_mark_and_other_people_are_ignored(game):
     assert chat.reactions == ["❓"]
     assert stranger.reactions == []
     assert game.bot.paid == [0]
+
+
+def test_an_answer_typed_while_the_question_mark_goes_on_still_counts(game):
+    class SlowReaction(_Message):
+        async def add_reaction(self, emoji):
+            await asyncio.sleep(0.5)  # a slow Discord round trip
+            await super().add_reaction(emoji)
+
+    async def scenario():
+        run = asyncio.create_task(game.flagle._run(game.channel, game.player))
+        await _tick()
+        game.bot.say(SlowReaction(game.player, "hmm"))
+        await _tick()
+        game.bot.say(_Message(game.player, "brunei"))  # while the ❓ is still in flight
+        await _tick()
+        game.bot.say(_Message(game.player, "iran"))
+        await run
+
+    asyncio.run(asyncio.wait_for(scenario(), 3))
+    assert game.bot.paid == [1]
+
+
+def test_guesses_get_cleaned_up_but_the_losing_one_stays(game):
+    game.channel.guild = SimpleNamespace(me="bot")
+    game.channel.permissions_for = lambda member: SimpleNamespace(manage_messages=True)
+
+    async def scenario():
+        run = asyncio.create_task(game.flagle._run(game.channel, game.player))
+        await _tick()
+        said = []
+        for text in ("brunei", "brunei", "hmm", "iran"):
+            said.append(game.bot.say(_Message(game.player, text)))
+            await _tick()
+        await run
+        return said
+
+    right, repeat, chat, wrong = asyncio.run(scenario())
+    assert (right.deleted, repeat.deleted) == (0, 0)
+    assert chat.deleted == cog.UNKNOWN_LINGER_SECONDS and chat.reactions == ["❓"]
+    assert wrong.deleted is None
+
+
+def test_nothing_gets_deleted_without_manage_messages(game):
+    game.channel.guild = SimpleNamespace(me="bot")
+    game.channel.permissions_for = lambda member: SimpleNamespace(manage_messages=False)
+
+    async def scenario():
+        run = asyncio.create_task(game.flagle._run(game.channel, game.player))
+        await _tick()
+        right = game.bot.say(_Message(game.player, "brunei"))
+        await _tick()
+        game.bot.say(_Message(game.player, "iran"))
+        await run
+        return right
+
+    assert asyncio.run(scenario()).deleted is None
 
 
 def test_time_runs_out_and_the_board_stops_counting(game):
